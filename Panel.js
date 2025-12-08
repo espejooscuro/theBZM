@@ -3,12 +3,13 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const { exec } = require('child_process');
+const fs = require('fs');
 
-const inventoryViewer = require('mineflayer-web-inventory');
 const InventoryListener = require('./InventoryListener');
 const ContainerInteractor = require('./ContainerInteractor');
 const ChatListener = require('./ChatListener');
 const ItemRequester = require('./ItemRequester');
+const SkyBlockItem = require('./SkyBlockItem');
 
 class Panel {
   constructor(bot, port = 3000) {
@@ -16,10 +17,12 @@ class Panel {
     this.invListener = new InventoryListener(bot);
     this.container = new ContainerInteractor(bot);
     this.currentPurse = null;
-
+    this.skyblock = new SkyBlockItem();
     this.requesterQueue = [];
     this.requesterOcupado = false;
     this.filledProcesados = new Set();
+    this.ultimoCantidad = {}; // { nombreItem: cantidad } 
+    this.ultimoTiempo = {};  
 
     this.chat = new ChatListener(bot, {
       excluirPalabras: ['APPEARING OFFLINE', '✎ Mana'],
@@ -27,15 +30,25 @@ class Panel {
       callback: msg => this.io?.emit('chatMensaje', msg),
     });
 
+    // JSON para guardar si la web ya se abrió
+    this.estadoPath = path.join(__dirname, "estado.json");
+
+    // Leer si la web ya estaba abierta
+    let webYaAbierta = false;
+    try {
+      const data = fs.readFileSync(this.estadoPath, "utf8");
+      const estado = JSON.parse(data);
+      webYaAbierta = estado.webAbierta;
+    } catch (err) {
+      console.log("No se pudo leer estado.json, se asume web no abierta.");
+    }
+
     this.app = express();
     this.server = http.createServer(this.app);
     this.io = new Server(this.server);
 
     this.viewerPort = 3002;
     this.viewerInstance = null;
-    this.iniciarViewer(bot);
-
-    bot.on('spawn', () => this.iniciarViewer(bot));
 
     this.bot._client.on('packet', packet => {
       if (packet.prefix?.includes('Purse:')) {
@@ -55,10 +68,35 @@ class Panel {
     this.server.listen(port, () => {
       console.log(`🌐 Panel web en http://localhost:${port}`);
       const url = `http://localhost:${port}`;
-      if (process.platform === 'win32') exec(`start ${url}`);
-      else if (process.platform === 'darwin') exec(`open ${url}`);
-      else exec(`xdg-open ${url}`);
+
+      // Abrir web solo si no estaba abierta
+      if (!webYaAbierta) {
+        if (process.platform === 'win32') exec(`start ${url}`);
+        else if (process.platform === 'darwin') exec(`open ${url}`);
+        else exec(`xdg-open ${url}`);
+
+        // Guardar que la web ya se abrió
+        fs.writeFileSync(this.estadoPath, JSON.stringify({ webAbierta: true }, null, 2));
+      }
     });
+
+
+    // ======================== WHITELIST GLOBAL ========================
+    this.whitelistPath = path.join(__dirname, "whitelist.json");
+    this.whitelist = {};
+
+    // Cargar whitelist desde archivo
+    try {
+      const data = fs.readFileSync(this.whitelistPath, "utf8");
+      this.whitelist = JSON.parse(data);
+      console.log("📄 Whitelist cargado:", this.whitelist);
+    } catch (err) {
+      console.log("⚠️ No existe whitelist.json, creando uno nuevo...");
+      fs.writeFileSync(this.whitelistPath, "{}");
+      this.whitelist = {};
+    }
+
+
 
     this.setupSockets();
   }
@@ -67,97 +105,468 @@ class Panel {
     return JSON.parse(this.invListener.obtenerInventario());
   }
 
-  iniciarViewer(bot) {
-    if (this.viewerInstance) this.viewerInstance.stop();
-    const port = 3002 + Math.floor(Math.random() * 100);
-    this.viewerPort = port;
 
-    const utils = require('mineflayer-web-inventory/utils');
-    const originalAddItemData = utils.addItemData;
-    utils.addItemData = function(item, slot) {
-      if (!slot || !slot.nbt) return { id: 0, count: 0, slot: 0 };
-      try { return originalAddItemData(item, slot); } catch { return { id: 0, count: 0, slot: 0 }; }
-    };
 
-    this.viewerInstance = inventoryViewer(bot, { port });
-    this.io?.emit('viewer-update');
+  async destroy() {
+  console.log("🧹 Cerrando Panel...");
+
+  // Detener todos los requesters
+  if (this.requesterQueue) {
+    for (const task of this.requesterQueue) {
+      try { task.requester?.destroy?.(); } catch {}
+      this.container = null;
+    }
+    this.requesterQueue = [];
+    this.requesterOcupado = false;
+  }
+
+  // Quitar listeners de chat y sockets
+  if (this.chat) {
+    this.chat.removeListeners?.();
+    this.chat.removeAllListeners?.();
+    this.invListener = null;
+
+  }
+  if (this.io) {
+    this.io.removeAllListeners?.();
+    this.io.close?.();
+  }
+
+  // Detener servidor con timeout
+  if (this.server) {
+    await Promise.race([
+      new Promise(res => this.server.close(res)),
+      new Promise(res => setTimeout(res, 2000))
+    ]);
+  }
+
+  // Limpiar timers internos
+  if (this._checkStopInterval) clearInterval(this._checkStopInterval);
+  if (this._timers) Object.values(this._timers).forEach(t => clearTimeout(t));
+
+  console.log("✅ Panel destruido correctamente");
+}
+
+
+
+
+  //Reset manual usado al principio de la ejecucón para comenzar el reset y todos los itemRequesters
+  manualReset() {
+  console.log("🔄 Ejecutando manualReset desde el panel…");
+
+  // 1️⃣ Avisar al cliente (solo animación)
+  this.io.emit("manualReset");
+
+  // 2️⃣ Resetear datos internos
+  this.filledProcesados.clear();
+  this.ultimoCantidad = {};
+  this.ultimoTiempo = {};
+  // this.requesterQueue = [];   ❗ NO se limpia aquí, se limpia al final del requester restart
+  // this.requesterOcupado = false;
+
+  console.log("🔄 Sistema interno preliminarmente reseteado.");
+
+  // 3️⃣ Crear requester especial "restart"
+  const nuevoId = Date.now();
+  const nombre = "restart";
+  const cantidad = 1;
+  const tiempo = 9999;
+  const enMinutos = false;
+
+  const nuevoRequester = new ItemRequester(
+    this.bot,
+    nuevoId,
+    nombre,
+    cantidad,
+    tiempo,
+    enMinutos
+  );
+  nuevoRequester.panel = this;
+  this.asignarListeners(nuevoRequester);
+
+  this.io.emit("itemAdded", { id: nuevoId, nombre, cantidad, tiempo });
+
+  console.log("🚀 Requester 'restart' creado:", {
+    id: nuevoRequester.id,
+    nombre: nuevoRequester.customName,
+    cantidad: nuevoRequester.cantidad
+  });
+
+  // 4️⃣ Encolar y limpiar todo cuando termine
+  this.requesterQueue.push({
+    start: () => new Promise(async resolve => {
+      nuevoRequester.once("finished", () => {
+        console.log("✅ Requester 'restart' terminado. Reseteando sistema completamente…");
+
+        this.requesterQueue = [];
+        this.requesterOcupado = false;
+        this.filledProcesados.clear();
+        this.ultimoCantidad = {};
+        this.ultimoTiempo = {};
+
+        resolve();
+      });
+
+      await nuevoRequester.start();
+    })
+  });
+
+  // 5️⃣ Si el sistema estaba detenido, empezar a procesar
+  if (!this.requesterOcupado) this.procesarCola();
+
+  // 6️⃣ Avisar al frontend que ya se inició el reset
+  this.io.emit("itemSystemRestarted");
+}
+
+
+
+async handleResetFinished(id) {
+  console.log(`♻️ [PANEL] resetFinished recibido de ID ${id}`);
+
+  // ------------------------------------------------
+  // 1️⃣ Obtener datos por defecto del reset
+  // ------------------------------------------------
+  let tiempo = this.defaultResetTime ?? 300; 
+  let enMinutos = this.defaultUnidadMinutos ?? false;
+
+  if (enMinutos) tiempo *= 60;
+
+  // ------------------------------------------------
+  // 2️⃣ Leer whitelist actual
+  // ------------------------------------------------
+  if (!this.whitelist) {
+    console.warn("⚠️ No hay whitelist configurada en el panel.");
+    return;
+  }
+
+  const whitelistIds = Object.keys(this.whitelist).filter(k => this.whitelist[k]);
+  if (whitelistIds.length === 0) {
+    console.log("⚠️ No hay items activos en la whitelist, nada que reiniciar.");
+    return;
+  }
+
+  // ------------------------------------------------
+  // 3️⃣ Obtener datos actualizados desde SkyBlock API
+  // ------------------------------------------------
+  let topItems = [];
+  try {
+    topItems = await this.skyblock.obtenerTop30NPCFlips();
+  } catch (err) {
+    console.error("Error obteniendo top NPC flips:", err);
+    return;
+  }
+
+  // ------------------------------------------------
+  // 4️⃣ Filtrar solo los que están en la whitelist
+  // ------------------------------------------------
+  const itemsAReiniciar = topItems.filter(item => whitelistIds.includes(item.id));
+
+  if (itemsAReiniciar.length === 0) {
+    console.log("⚠️ Ningún item del whitelist aparece en el top30. Abortando reinicio.");
+    return;
+  }
+
+  // ------------------------------------------------
+  // 5️⃣ Crear requesters para cada item filtrado
+  // ------------------------------------------------
+  for (const item of itemsAReiniciar) {
+    const idRandom = Math.floor(Math.random() * 1000000) + 1;
+    const nombre = item.nombre;
+    const cantidad = item.cantidadCon1M; // o la que quieras usar
+
+    console.log(`🎯 Reiniciando item: ${nombre} x${cantidad}`);
+
+    const requester = new ItemRequester(this.bot, idRandom, nombre, cantidad, tiempo, enMinutos);
+    requester.panel = this;
+    this.asignarListeners(requester);
+    this.io.emit('itemAdded', { id: idRandom, nombre, cantidad, tiempo });
+    this.requesterQueue.push({
+      start: () =>
+        new Promise(resolve => {
+          requester.once("finished", () => resolve());
+          requester.start();
+        })
+    });
+  }
+
+  // ------------------------------------------------
+  // 6️⃣ Procesar la cola si estaba vacía
+  // ------------------------------------------------
+  if (!this.requesterOcupado) this.procesarCola();
+}
+
+
+
+
+
+
+
+
+
+  asignarListeners(requester) {
+    requester.on('itemSearchFail', ({ id, nombre }) =>
+      this.io.emit('stopItemSearch', { id, nombre })
+    );
+
+    requester.on('itemSearchFound', ({ id, nombre }) => {
+      //console.log("ENVIANDO UN PAQUETE PARA CONTINUAR CON EL OBJETO DE LA TARJETA!!!! ID: ", id);
+      this.io.emit('ContinueItemSearch', { id, nombre });
+    });
+
+    requester.on('itemCostDetected', ({ id, nombre, cost }) =>
+      this.io.emit('itemCostDetected', { id, nombre, cost })
+    );
+
+    requester.on('itemTotalDetected', ({ id, nombre, cantidad, precioTotal, ganancia }) =>
+      this.io.emit('updateItemTotal', { id, nombre, cantidad, precioTotal, ganancia })
+    );
+
+    requester.on('updateStatus', ({ id, nombre, estado }) =>
+      this.io.emit('updateItemStatus', { id, nombre, estado })
+    );
+
+    requester.on('purseUpdate', value => {
+      this.currentPurse = value;
+      this.io.emit('purseUpdate', { value });
+    });
+
+    requester.on('timerFinished', ({ id }) =>
+      this.io.emit('timerFinished', { id })
+    );
+
+    requester.on('resetFinished', ({ id }) => {
+      this.handleResetFinished(id)
+    }
+          
+        );
+
+
+    requester.on('cleanFilled', () => {
+    console.log("🔄 [Reset]  limpiando estado Filled...");
+
+    this.requesterQueue = [];
+    // this.requesterOcupado = false;
+    this.filledProcesados.clear();
+    this.ultimoCantidad = {};
+    this.ultimoTiempo = {};
+
+    if (this.esperandoResolucion) {
+        this.esperandoResolucion();
+        this.esperandoResolucion = null;
+    }
+});
+
+    requester.on('readyForFilled', ({ id, nombre, task, cantidad, tiempo, enMinutos }) => {
+      //console.log(`🔹 [LOG] readyForFilled -> id:${id} "${nombre}" cantidad:${cantidad} tiempo:${tiempo}`);
+
+      if (cantidad !== undefined) this.ultimoCantidad[id] = cantidad;
+      if (tiempo !== undefined) this.ultimoTiempo[id] = tiempo;
+
+      cantidad = cantidad ?? this.ultimoCantidad[id];
+      tiempo = tiempo ?? this.ultimoTiempo[id];
+
+      if (!cantidad || !tiempo || cantidad <= 0 || tiempo <= 0) {
+        console.log(`⚠️ Valores inválidos para id:${id} "${nombre}" -> cantidad:${cantidad} tiempo:${tiempo}`);
+        return;
+      }
+
+      if (this.filledProcesados.has(id)) {
+        //console.log(`⚠️ id:${id} "${nombre}" ya está procesándose. Ignorando duplicado…`);
+        return;
+      }
+
+      this.filledProcesados.add(id);
+
+      this.requesterQueue.push({
+        start: async () => {
+          try {
+            await task();
+          } catch (err) {
+            console.error(`❌ Error llenando id:${id} "${nombre}"`, err);
+          }
+
+          // Marcar como filled
+          this.io.emit('updateItemStatus', { id, nombre, estado: 'filled' });
+          this.filledProcesados.delete(id);
+
+          // Reemitir itemAdded
+          const nuevoId = Math.floor(Math.random() * 1000000) + 1;
+          this.io.emit('itemAdded', { id: nuevoId, nombre, cantidad, tiempo });
+
+          // Crear nuevo requester y asignarle todos los listeners
+          const nuevoRequester = new ItemRequester(this.bot, nuevoId, nombre, cantidad, tiempo, enMinutos);
+          nuevoRequester.panel = this;
+          this.asignarListeners(nuevoRequester);
+
+          this.requesterQueue.push({
+            start: () =>
+              new Promise(resolve => {
+                nuevoRequester.once('finished', () => resolve());
+                nuevoRequester.start();
+              })
+          });
+
+          if (!this.requesterOcupado) this.procesarCola();
+        }
+      });
+
+      if (!this.requesterOcupado) this.procesarCola();
+    });
   }
 
   setupSockets() {
     this.io.on('connection', socket => {
       console.log('🖥️ Cliente conectado al panel web');
+      const whitelistPath = path.join(__dirname, "whitelist.json");
+      let whitelistData = {};
+      try {
+        
+        const data = fs.readFileSync(whitelistPath, "utf8");
+        whitelistData = JSON.parse(data);
+      } catch (err) {
+        console.warn("No se pudo leer whitelist.json, usando whitelist vacía");
+      }
 
-      // Inventario
-      socket.emit('inventario', this.obtenerInventario());
-      socket.on('actualizarInventario', () => socket.emit('inventario', this.obtenerInventario()));
+      // 🔹 Enviar whitelist al cliente
+      socket.emit("whitelistData", whitelistData);
 
-      // Purse
-      if (this.currentPurse !== null) socket.emit('purseUpdate', { value: this.currentPurse });
 
-      // Solicitar item
-      socket.on('solicitarItem', ({ nombre, cantidad, tiempo, enMinutos }) => {
-        if (!nombre || !cantidad) return;
 
-        socket.emit('itemAdded', {
-          nombre,
-          cantidad,
-          tiempo: enMinutos ? tiempo * 60 : tiempo
-        });
+      socket.on('solicitarNPCFlips', async () => {
+        console.log('Cliente pidió datos de NPC Flips');
+        try {
+          // Usar la instancia de SkyBlockItem
+          const resultados = await this.skyblock.obtenerTop30NPCFlips();
+          socket.emit('npcFlipsData', resultados);
+        } catch (err) {
+          console.error('Error al calcular NPC Flips:', err);
+          socket.emit('npcFlipsData', []); // enviar array vacío en caso de error
+        }
+      });
 
-        const requester = new ItemRequester(this.bot, nombre, cantidad, tiempo, enMinutos);
+      socket.on("actualizarWhitelist", (newWL) => {
+        fs.writeFileSync("whitelist.json", JSON.stringify(newWL, null, 2));
+        console.log("Whitelist actualizado:", newWL);
 
-        requester.on('itemSearchFail', ({ nombre }) => this.io.emit('stopItemSearch', { nombre }));
-        requester.on('itemSearchFound', ({ nombre }) => this.io.emit('ContinueItemSearch', { nombre }));
-        requester.on('itemCostDetected', ({ nombre, cost }) => this.io.emit('itemCostDetected', { nombre, cost }));
-        requester.on('itemTotalDetected', ({ nombre, cantidad, precioTotal, ganancia }) =>
-          this.io.emit('updateItemTotal', { nombre, cantidad, precioTotal, ganancia })
-        );
-        requester.on('updateStatus', ({ nombre, estado }) => this.io.emit('updateItemStatus', { nombre, estado }));
-        requester.on('purseUpdate', value => { this.currentPurse = value; this.io.emit('purseUpdate', { value }); });
+        // Enviar el whitelist actualizado a TODOS los clientes
+        this.io.emit("whitelistData", newWL);
+      });
 
-        requester.on('readyForFilled', ({ nombre, task }) => {
-          if (!nombre || !task) return;
 
-          // Evitamos duplicados (como ya tenías con filledProcesados)
-          if (!this.filledProcesados) this.filledProcesados = new Set();
-          if (this.filledProcesados.has(nombre)) return;
-          this.filledProcesados.add(nombre);
+            // 🔄 RESTART DEL SISTEMA DE REQUESTERS
+      socket.on("restartItemSystem", () => {
+        console.log("🔄 [PANEL] Se recibió restartItemSystem desde el cliente.");
 
-          // Push de la tarea al final de la cola. El start() ejecuta la task que vino desde ItemRequester.
-          this.requesterQueue.push({
-            start: async () => {
-              console.log(`🚀 Ejecutando tarea de filled (encolada) para ${nombre}`);
-              try {
-                await task(); // ejecuta la función async creada por ItemRequester
-              } catch (err) {
-                console.error(`Error en filled task de ${nombre}:`, err);
-              }
-              // Emitir al frontend que se completó (por si no lo emitió la task)
-              this.io.emit('updateItemStatus', { nombre, estado: 'filled' });
-            }
+        // ======================================================
+        // 1️⃣ RESETEAR TODA LA LÓGICA
+        // ======================================================
+/*
+        this.requesterQueue = [];
+        this.requesterOcupado = false;
+*/
+        this.filledProcesados.clear();
+
+        this.ultimoCantidad = {};
+        this.ultimoTiempo = {};
+
+        console.log("🔄 [PANEL] Sistema interno reseteado.");
+
+        // ======================================================
+        // 2️⃣ CREAR REQUESTER ESPECIAL "restart"
+        // ======================================================
+
+            console.log("🔄 [PANEL] Se recibió restartItemSystem desde el cliente.");
+
+      // Crear requester especial "restart" que solo limpia al terminar
+      const nuevoId = Date.now();
+      const nombre = "restart";
+      const cantidad = 1;
+      const tiempo = 9999;
+      const enMinutos = false;
+
+      const nuevoRequester = new ItemRequester(
+        this.bot,
+        nuevoId,
+        nombre,
+        cantidad,
+        tiempo,
+        enMinutos
+      );
+      nuevoRequester.panel = this;
+      this.asignarListeners(nuevoRequester);
+      
+      this.io.emit('itemAdded', { id: nuevoId, nombre, cantidad, tiempo });
+
+      console.log("🚀 Requester 'restart' creado:", {
+        id: nuevoRequester.id,
+        nombre: nuevoRequester.customName,
+        cantidad: nuevoRequester.cantidad
+      });
+
+      // Encolarlo al final
+      this.requesterQueue.push({
+        start: () => new Promise(async resolve => {
+          nuevoRequester.once('finished', () => {
+            // Limpiar la cola y resetear estados
+            console.log("✅ Requester 'restart' terminado, limpiando cola");
+            this.requesterQueue = [];
+            this.requesterOcupado = false;
+            this.filledProcesados.clear();
+            this.ultimoCantidad = {};
+            this.ultimoTiempo = {};
+
+            resolve();
           });
 
-          // Si la cola está libre, arrancamos el procesado
-          if (!this.requesterOcupado) this.procesarCola();
-        });
+          await nuevoRequester.start();
+        })
+      });
+
+      if (!this.requesterOcupado) this.procesarCola();
+
+      this.io.emit("itemSystemRestarted");
 
 
-        // Metemos en la cola como promesa y liberamos automáticamente
+
+        // 4️⃣ Lanzar procesamiento
+        //this.procesarSiguienteRequester();
+
+        // ======================================================
+        // 5️⃣ Avisar opcionalmente al frontend
+        // ======================================================
+        this.io.emit("itemSystemRestarted");
+      });
+
+
+
+      socket.emit('inventario', this.obtenerInventario());
+      socket.on('actualizarInventario', () => socket.emit('inventario', this.obtenerInventario()));
+      socket.on('enviarComando', texto => this.chat.enviar(texto));
+      if (this.currentPurse !== null) socket.emit('purseUpdate', { value: this.currentPurse });
+
+      socket.on('solicitarItem', ({ id, nombre, cantidad, tiempo, enMinutos }) => {
+        if (!nombre || !cantidad) return;
+
+        console.log("Se ha solicitado un item con ID: ", id);
+        socket.emit('itemAdded', { id, nombre, cantidad, tiempo: enMinutos ? tiempo * 60 : tiempo });
+
+        // Crear requester inicial y asignarle listeners
+        const requester = new ItemRequester(this.bot, id, nombre, cantidad, tiempo, enMinutos);
+        requester.panel = this;
+        this.asignarListeners(requester);
+
         this.requesterQueue.push({
-          start: () => new Promise(resolve => {
-            requester.once('finished', () => {
-              console.log(`✅ Requester terminado para ${nombre}`);
-              resolve();
-            });
-            requester.start();
-          })
+          start: () =>
+            new Promise(resolve => {
+              requester.once('finished', () => resolve());
+              requester.start();
+            })
         });
 
         this.procesarCola();
       });
     });
   }
-
 
   async procesarCola() {
     if (this.requesterOcupado || this.requesterQueue.length === 0) return;
@@ -173,7 +582,11 @@ class Panel {
 
     this.requesterOcupado = false;
     this.procesarCola();
+  
   }
+
+
+  
 }
 
 module.exports = Panel;

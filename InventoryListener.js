@@ -174,19 +174,161 @@ class InventoryListener {
       })
       .filter(Boolean);
 
-    return items.some(item => {
+      return items.some(item => {
+
+      // 🔹 1. Coincidencia parcial: contiene
+      if (filtros.contiene) {
+        const needle = filtros.contiene.toLowerCase();
+
+        const nombreOriginal = (item.nombreOriginal || '').toLowerCase();
+        const nombreCustom   = (item.nombreCustom   || '').toLowerCase();
+
+        const coincide =
+          nombreOriginal.includes(needle) ||
+          nombreCustom.includes(needle);
+
+        if (!coincide) return false;
+      }
+
+      // 🔹 2. Coincidencias exactas (lo de siempre)
       for (const key in filtros) {
+        if (key === 'contiene') continue; // ya lo procesamos antes
+
         const valorItem = item[key];
         const valorFiltro = filtros[key];
+
         if (typeof valorItem === 'string' && typeof valorFiltro === 'string') {
           if (valorItem.toLowerCase() !== valorFiltro.toLowerCase()) return false;
         } else if (valorItem !== valorFiltro) {
           return false;
         }
       }
+
       return true;
     });
+
   }
+
+
+
+   /**
+   * Comprueba si solo 1/3 o menos de los slots del inventario están vacíos
+   * @returns {boolean} true si cumple la condición
+   */
+  inventarioMayormenteLleno() {
+    const window = this.bot.currentWindow;
+    if (!window) return false;
+
+    // Tomamos los últimos 36 slots que corresponden al inventario del jugador
+    const inventarioSlots = window.slots.slice(-36);
+
+    const vacios = inventarioSlots.filter(slot => !slot).length;
+    const totalSlots = inventarioSlots.length;
+
+    // 1/3 de slots vacíos máximo
+    return vacios <= totalSlots / 3;
+  }
+
+
+
+obtenerItemsValidos() {
+  const window = this.bot.currentWindow;
+  if (!window) return [];
+
+  const containerSlots = window.slots.length - 36;
+  const resultado = [];
+
+  for (let slot = 0; slot < containerSlots; slot++) {
+    const item = window.slots[slot];
+    if (!item) continue;
+    if (item.name === "stained_glass_pane") continue;
+
+    let nombreCustom = "";
+    const nbt = item.nbt || { value: {} };
+    if (nbt.value.display?.value?.Name) {
+      nombreCustom = nbt.value.display.value.Name.value;
+    } else {
+      nombreCustom = item.displayName || item.name;
+    }
+
+    const nombrePlano = nombreCustom.replace(/§[0-9a-fk-or]/gi, "").trim().toLowerCase();
+    if (nombrePlano === "go back" || nombrePlano === "claim all coins") continue;
+
+    resultado.push({
+      slot,
+      nombreOriginal: item.name,
+      nombreCustom,
+      nombrePlano,
+      cantidad: item.count
+    });
+  }
+
+  return resultado;
+}
+
+obtenerItemsValidosInventario() {
+  const window = this.bot.currentWindow;
+  if (!window) return [];
+
+  // Los últimos 36 slots son el inventario del jugador
+  const inicioInventario = window.slots.length - 36;
+  const resultado = [];
+
+  for (let slot = inicioInventario; slot < window.slots.length; slot++) {
+    const item = window.slots[slot];
+    if (!item) continue;
+    if (item.name === "stained_glass_pane") continue;
+
+    let nombreCustom = "";
+    const nbt = item.nbt || { value: {} };
+    if (nbt.value.display?.value?.Name) {
+      nombreCustom = nbt.value.display.value.Name.value;
+    } else {
+      nombreCustom = item.displayName || item.name;
+    }
+
+    const nombrePlano = nombreCustom.replace(/§[0-9a-fk-or]/gi, "").trim().toLowerCase();
+    if (nombrePlano === "go back" || nombrePlano === "claim all coins") continue;
+
+    resultado.push({
+      slot,
+      nombreOriginal: item.name,
+      nombreCustom,
+      nombrePlano,
+      cantidad: item.count
+    });
+  }
+
+  return resultado;
+}
+
+
+compararItemsPorNombre(itemsContenedor, itemsInventario) {
+  const resultado = [];
+
+  for (const itemInv of itemsInventario) {
+    const nombrePlano = itemInv.nombrePlano; // ya limpio y en minúsculas
+
+    // Nombre base quitando "enchanted " si existe al inicio
+    const nombreBase = nombrePlano.startsWith("enchanted ") 
+      ? nombrePlano.slice(9) // quitar "enchanted "
+      : nombrePlano;
+
+    const coincide = itemsContenedor.some(itemCont => {
+      return (
+        itemCont.nombrePlano.includes(nombrePlano) || // coincidencia normal
+        itemCont.nombrePlano.includes(nombreBase)    // coincidencia quitando "enchanted "
+      );
+    });
+
+    if (coincide) {
+      resultado.push(itemInv);
+    }
+  }
+
+  return resultado;
+}
+
 
 
 }

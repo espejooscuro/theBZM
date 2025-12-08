@@ -1,335 +1,333 @@
+<!-- Modernized version of the page WITHOUT inventory viewer iframe, keeping purse, cards, chat and logic -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Panel del Bot (Inventario + Chat)</title>
+  <meta charset="UTF-8" />
+  <title>Panel del Bot</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    /* =================== ESTILOS GENERALES =================== */
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background-color: #1e1e2f;
-      color: #f1f1f1;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
+body {
+  background-color: #f0f4f8;
+  background-image: url('https://www.transparenttextures.com/patterns/cubes.png');
+  background-repeat: repeat;
+  background-size: auto;
+}
 
-    h1, h2 { color: #00bcd4; }
 
-    input, select, button {
-      padding: 8px;
-      border-radius: 5px;
-      border: none;
-      margin: 5px;
-    }
 
-    button {
-      background: #00bcd4;
-      color: #fff;
-      cursor: pointer;
-    }
+/* TITULOS */
+h1, h2 {
+  color: #1976d2; /* azul más limpio */
+  margin-left: 20px;
+}
 
-    button:hover { background: #0197a6; }
+/* BOTONES */
+button {
+  background: #1976d2;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  color: #fff;
+  transition: all 0.2s ease;
+}
+button:hover {
+  background: #1565c0;
+}
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+/* INPUTS / SELECTS */
+input, select {
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #222;
+}
 
-    th, td { border: 1px solid #444; padding: 10px; }
-    tr:nth-child(even) { background-color: #2a2a3d; }
+/* PURSE */
+#purse-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ffd54f;
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-weight: bold;
+  color: #222;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
 
-    /* =================== SECCIÓN DE INVENTARIO =================== */
-    #inventarioContainer {
-      display: flex;
-      justify-content: space-between;
-      margin: 20px;
-    }
+#purse-display {
+  font-size: 1.8em;
+}
 
-    #tablaContainer {
-      flex: 1;
-      margin-right: 20px;
-      overflow-x: auto;
-    }
+/* ITEMS SOLICITADOS */
+#itemsSolicitadosContainer {
+  margin: 20px;
+}
 
-    #tablaScroll {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #444;
-      border-radius: 8px;
-    }
+#itemsSolicitadosList {
+  display: flex;
+  overflow-x: auto;
+  gap: 15px;
+  padding-bottom: 10px;
+}
 
-    iframe#webInventoryFrame {
-      width: 400px;
-      height: 400px;
-      border: 1px solid #444;
-      border-radius: 8px;
-    }
+.itemCard {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  width: 180px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
 
-    /* =================== SECCIÓN DE CHAT =================== */
-    #chatContainer {
-      background-color: #2a2a3d;
-      border-top: 2px solid #00bcd4;
-      padding: 10px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
+.itemCard h3 {
+  margin: 0 0 8px 0;
+  color: #1976d2;
+}
+.itemCard p {
+  margin: 4px 0;
+  font-size: 13px;
+}
 
-    #chatLog {
-      flex: 1;
-      max-height: 300px;
-      overflow-y: auto;
-      background: #1e1e2f;
-      padding: 10px;
-      border-radius: 8px;
-      font-family: monospace;
-      font-size: 14px;
-      text-align: left;
-    }
+/* BARRA DE PROGRESO */
+.progress-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 100%;
+  background: #d32f2f;
+  transition: width 0.3s linear;
+}
 
-    #chatInputContainer { display: flex; margin-top: 10px; }
+/* CHAT */
+#chatContainer {
+  background: #fff;
+  margin-top: auto;
+  padding: 20px;
+  border-top: 3px solid #1976d2;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px 12px 0 0;
+}
 
-    #mensajeInput {
-      flex: 1;
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      background: #333;
-      color: #fff;
-      margin-right: 10px;
-    }
+#chatLog {
+  background: #f1f3f4;
+  padding: 10px;
+  height: 250px;
+  overflow-y: auto;
+  border-radius: 8px;
+  font-family: monospace;
+  margin-bottom: 10px;
+}
 
-    #enviarBtn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      background: #00bcd4;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-    }
+#chatInputContainer {
+  display: flex;
+  gap: 10px;
+}
+#mensajeInput {
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
 
-    #enviarBtn:hover { background: #0197a6; }
+/* NPC FLIPS */
+/* Contenedor general */
+#npcFlipsContainer {
+  margin: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+  padding: 10px;
+}
 
-    /* =================== NUEVA SECCIÓN: ITEMS SOLICITADOS =================== */
-    #itemsSolicitadosContainer {
-      margin: 20px;
-    }
+/* Contenedor con fondo y scroll solo para la tabla */
+/* NPC FLIPS - Modernizado y más agradable */
+#npcFlipsTableWrapper {
+  background: #eaf3fc; /* fondo suave */
+  padding: 20px;
+  border-radius: 16px;
+  overflow-x: auto;
+  max-height: 400px;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.08);
+}
 
-    #itemsSolicitadosList {
-      display: flex;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      gap: 10px;
-      margin-top: 15px;
-      padding-bottom: 10px;
-    }
+#npcFlipsContainer table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px; /* separa las filas */
+}
 
-    .itemCard {
-      background-color: #ad680e;
-      border: 1px solid #444;
-      border-radius: 8px;
-      padding: 15px;
-      min-width: 150px;
-      text-align: center;
-      flex-shrink: 0;
-      transition: opacity 0.5s ease, transform 0.5s ease;
-    }
+#npcFlipsContainer th {
+  background: #1976d2;
+  color: #fff;
+  padding: 10px;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 8px 8px 0 0;
+}
 
-    .itemCard h3 {
-      margin: 0 0 10px 0;
-      font-size: 16px;
-      color: #00bcd4;
-    }
+#npcFlipsContainer td {
+  padding: 10px;
+  background: #fff;
+  border: none;
+  text-align: center;
+  border-radius: 8px;
+  transition: background 0.3s, transform 0.2s;
+}
 
-    .itemCard p {
-      margin: 5px 0;
-    }
+#npcFlipsContainer td:first-child {
+  text-align: left;
+}
 
-    /* Scrollbar horizontal */
-    #itemsSolicitadosList::-webkit-scrollbar {
-      height: 8px;
-    }
-    #itemsSolicitadosList::-webkit-scrollbar-thumb {
-      background-color: #00bcd4;
-      border-radius: 4px;
-    }
-    #itemsSolicitadosList::-webkit-scrollbar-track {
-      background-color: #1e1e2f;
-    }
+#npcFlipsContainer tr:hover td {
+  background-color: #dbeafe;
+  transform: scale(1.02);
+}
+
+#npcFlipsContainer button.btnWhitelist {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  background: #ff9800;
+  color: #fff;
+  transition: background 0.2s, transform 0.2s;
+}
+#npcFlipsContainer button.btnWhitelist:hover {
+  background: #fb8c00;
+  transform: scale(1.05);
+}
+
+
+
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+th {
+  background: #1976d2;
+  color: #fff;
+  padding: 8px;
+  position: sticky;
+  top: 0;
+}
+
+td {
+  padding: 8px;
+  border-bottom: 1px solid #e0e0e0;
+}
   </style>
 </head>
 
 <body>
-  <h1>🧱 Inventario del Bot</h1>
+  <h1>Panel del Bot</h1>
 
-  <!-- =================== SECCIÓN DE INVENTARIO =================== -->
-  <div id="inventarioContainer">
-    <div id="tablaContainer">
-      <button id="btnActualizar">Actualizar Inventario</button>
-      <div style="margin:20px;">
-        <input id="slotInput" type="number" placeholder="Slot..." />
-        <select id="tipoSelect">
-          <option value="inventario">Inventario</option>
-          <option value="contenedor">Contenedor</option>
-        </select>
-        <button id="btnClickSlot">Click por Slot</button>
-      </div>
+<!-- Contenedor general fijo en la esquina superior derecha -->
+<!-- PURSE -->
+<div id="purse-container" style="
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ffd54f;
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-weight: bold;
+  color: #222;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+">
+  Purse: <span id="purse-display">0</span>
+</div>
 
-      <div style="margin:20px;">
-        <input id="nombreInput" type="text" placeholder="Nombre del item..." />
-        <select id="tipoNombreSelect">
-          <option value="inventario">Inventario</option>
-          <option value="contenedor">Contenedor</option>
-        </select>
-        <button id="btnClickNombre">Click por Nombre</button>
-      </div>
+<!-- GANANCIA/PÉRDIDA -->
+<div id="purse-gain-container" style="
+  position: fixed;
+  top: 80px; /* justo debajo del purse */
+  right: 20px;
+  background: #4caf50;
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-weight: bold;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+">
+  Ganancia: <span id="purse-gain-display">0</span>
+</div>
 
-      <div id="tablaScroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Slot</th>
-              <th>Nombre Original</th>
-              <th>Nombre Custom</th>
-              <th>ID</th>
-              <th>Cantidad</th>
-              <th>Tipo</th>
-            </tr>
-          </thead>
-          <tbody id="tablaInventario"></tbody>
-        </table>
-      </div>
+
+
+
+  <!-- ITEMS SOLICITADOS -->
+  <div id="itemsSolicitadosContainer">
+    <h2>📦 Items Solicitados</h2>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+      <input id="itemNombre" placeholder="Nombre..." />
+      <input id="itemCantidad" type="number" placeholder="Cantidad" />
+      <input id="itemTiempo" type="number" placeholder="Tiempo" />
+      <select id="itemUnidad">
+        <option value="segundos">Segundos</option>
+        <option value="minutos">Minutos</option>
+      </select>
+      <button id="btnSolicitarItem">Solicitar</button>
     </div>
 
-    <iframe id="webInventoryFrame"></iframe>
+    <div id="itemsSolicitadosList"></div>
   </div>
 
-<!-- =================== NUEVA SECCIÓN: Items Solicitados =================== -->
-<div id="itemsSolicitadosContainer" style="margin:20px;">
-  <h2>📦 Items Solicitados</h2>
+  <!-- NPC FLIPS -->
+  <div id="npcFlipsContainer">
+  <h2>💎 Top NPC Flips</h2>
+  <button id="btnActualizarNPCFlips">Recargar</button>
+  <button id="btnComenzarFlips">Comenzar</button>
+  <button id="btnRestartCards">Restart</button>
 
-  <!-- Inputs y botón -->
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-    <input id="itemNombre" type="text" placeholder="Nombre del item..." />
-    <input id="itemCantidad" type="number" placeholder="Cantidad..." min="1" />
-    <input id="itemTiempo" type="number" placeholder="Tiempo..." min="1" />
-    <select id="itemUnidad">
-      <option value="segundos">Segundos</option>
-      <option value="minutos">Minutos</option>
-    </select>
-    <button id="btnSolicitarItem">Solicitar Item</button>
+  <div id="npcFlipsTableWrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th><th>ID</th><th>Buy</th><th>NPC</th><th>Profit</th>
+          <th>Cant 1M</th><th>Total</th><th>IS Sem</th><th>IS 1h</th><th>Sell</th>
+          <th>Enchant</th><th>WL</th>
+        </tr>
+      </thead>
+      <tbody id="tablaNPCFlips"></tbody>
+    </table>
   </div>
-
-  <!-- Contenedor de items -->
-  <div id="itemsSolicitadosList" style="display:flex;gap:10px;overflow-x:auto;padding:10px 0;"></div>
 </div>
 
-<style>
-/* =================== ESTILOS ITEMS SOLICITADOS =================== */
-.itemCard {
-  flex: 0 0 auto; /* Evita que se encoja */
-  background: #e4e016;
-  border: 1px solid #444;
-  border-radius: 8px;
-  padding: 10px;
-  width: 150px;
-  box-sizing: border-box;
-  font-family: monospace;
-  position: relative;
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
-
-.itemCard h3 {
-  margin: 0 0 5px 0;
-  font-size: 14px;
-}
-
-.itemCard p {
-  margin: 3px 0;
-  font-size: 12px;
-}
-
-.progress-bar {
-  height: 6px;
-  border-radius: 4px;
-  background: #555;
-  margin-top: 5px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  width: 100%;
-  background: #00bcd4;
-  transition: width 0.3s linear, background 0.3s linear;
-}
 
 
-.itemCard {
-  transition: background-color 0.5s ease, opacity 0.5s ease, transform 0.5s ease;
-}
 
-.itemCard[data-estado="fallido"] {
-  background-color: #8b0000; /* rojo oscuro */
-  color: white; /* texto blanco para contraste */
-  border: 1px solid #ff4d4d;
-}
-
-
-</style>
-<!-- -------------------- Contenedor del Purse -------------------- -->
-<div id="purse-container">
-  <span id="purse-label">Purse:</span>
-  <span id="purse-display">0</span>
-</div>
-
-<style>
-  /* -------------------- Estilos del contenedor -------------------- */
-  #purse-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: linear-gradient(to right, #FFD700 0%, #FFA500 100%);
-    padding: 10px 20px;
-    border-radius: 10px;
-    box-shadow: 2px 2px 8px rgba(0,0,0,0.6);
-    display: flex;
-    align-items: center;
-    font-family: 'Minecraft', sans-serif;
-    z-index: 9999;
-  }
-
-  /* -------------------- Etiqueta "Purse:" -------------------- */
-  #purse-label {
-    font-weight: bold;
-    color: #fff;
-    margin-right: 10px;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-  }
-
-  /* -------------------- Valor del Purse -------------------- */
-  #purse-display {
-    font-size: 2em;
-    font-weight: bold;
-    color: #ffeb3b; /* dorado brillante */
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-  }
-</style>
-
-<!-- -------------------- Script para actualizar Purse -------------------- -->
-
+  <!-- CHAT -->
+  <div id="chatContainer">
+    <h2>💬 Chat</h2>
+    <div id="chatLog"></div>
+    <div id="chatInputContainer">
+      <input id="mensajeInput" placeholder="Mensaje..." />
+      <button id="enviarBtn">Enviar</button>
+    </div>
+  </div>
 
 
 <script>
-      // =================== SOCKET.IO ===================
-    const socket = io();
+// =================== SOCKET.IO ===================
+const socket = io();
 
-// =================== LÓGICA ITEMS SOLICITADOS ===================
+// =================== ITEMS SOLICITADOS ===================
 const btnSolicitarItem = document.getElementById('btnSolicitarItem');
 const itemList = document.getElementById('itemsSolicitadosList');
 
@@ -338,72 +336,75 @@ btnSolicitarItem.onclick = () => {
   const cantidad = parseInt(document.getElementById('itemCantidad').value.trim());
   let tiempo = parseInt(document.getElementById('itemTiempo').value.trim());
   const enMinutos = document.getElementById('itemUnidad').value === 'minutos';
-
+  
   if (!nombre || isNaN(cantidad) || isNaN(tiempo)) {
     alert('❌ Debes completar todos los campos correctamente.');
     return;
   }
 
-  if (enMinutos) tiempo *= 60; // Convertir a segundos
-
-  // Emitir al servidor para crear ItemRequester
-  socket.emit('solicitarItem', { nombre, cantidad, tiempo, enMinutos });
-
-  // Ya no desactivamos el botón
-  // btnSolicitarItem.disabled = true;
-  // btnSolicitarItem.textContent = '⏳ Creando...';
+  if (enMinutos) tiempo *= 60;
+  let id = Math.floor(Math.random() * 1000000) + 1;
+  socket.emit('solicitarItem', {id, nombre, cantidad, tiempo, enMinutos });
 };
 
 // Crear tarjeta en el frontend cuando el servidor confirma
-socket.on('itemAdded', ({ nombre, cantidad, tiempo }) => {
-  const id = nombre.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+socket.on('itemAdded', ({id, nombre, cantidad, tiempo }) => {
   const div = document.createElement('div');
-  div.id = id;
+  div.id = `item_${id}`;
   div.className = 'itemCard';
+  div.dataset.itemId = id;
   div.dataset.itemNombre = nombre.toLowerCase();
   div.dataset.estado = 'activo';
-  
+
   div.innerHTML = `
     <h3>${nombre}</h3>
     <p>Cantidad: ${cantidad}</p>
     <p class="tiempoRestante">Tiempo restante: ${tiempo}s</p>
-    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:#d4000b;"></div></div>
+    <div class="progress-bar">
+      <div class="progress-fill" style="width:100%;background:#d4000b;"></div>
+    </div>
+    <span class="item-id" style="position: absolute; top: 5px; right: 8px; font-size: 12px; color: #ccc;">ID: ${id}</span>
   `;
+
   itemList.appendChild(div);
   itemList.scrollLeft = itemList.scrollWidth;
 
   const fill = div.querySelector('.progress-fill');
   const label = div.querySelector('.tiempoRestante');
-  const total = tiempo;
   let remaining = tiempo;
+  div.dataset.intervalActivo = "no";
 
   const interval = setInterval(() => {
+    if (div.dataset.intervalActivo === "no") return;
+
     remaining--;
     if (remaining < 0) remaining = 0;
-    const percent = (remaining / total) * 100;
-    fill.style.width = percent + '%';
+
+    fill.style.width = (remaining / tiempo) * 100 + '%';
     label.textContent = `Tiempo restante: ${remaining}s`;
 
     if (remaining <= 0 && div.dataset.estado === 'activo') {
       clearInterval(interval);
-      div.style.opacity = '0';
-      div.style.transform = 'translateY(-10px)';
-      setTimeout(() => div.remove(), 500);
+      div.dataset.estado = 'agotado';
+      div.style.transition = 'background-color 0.5s ease';
+      div.style.backgroundColor = '#6a0dad';
+      label.textContent = '⏳ Tiempo agotado';
+      fill.style.width = '0%';
+      return;
     }
   }, 1000);
 });
 
+// =================== EVENTOS SOCKET ===================
 
+// STOP
+socket.on('stopItemSearch', ({ id }) => {
+  setTimeout(() => {
+    const card = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+    if (!card) return;
 
-
-socket.on('stopItemSearch', ({ nombre }) => {
-  const nombreNormalizado = nombre.toLowerCase();
-
-  const card = document.querySelector(`.itemCard[data-item-nombre="${nombreNormalizado}"]`);
-
-  if (card) {
     card.style.transition = 'background-color 0.5s ease, opacity 0.5s ease, transform 0.5s ease';
-    card.style.backgroundColor = '#8b0000'; // rojo oscuro
+    card.style.backgroundColor = '#8b0000';
     card.dataset.estado = 'fallido';
 
     setTimeout(() => {
@@ -411,227 +412,438 @@ socket.on('stopItemSearch', ({ nombre }) => {
       card.style.transform = 'translateY(-10px)';
       setTimeout(() => card.remove(), 600);
     }, 1000);
-  } else {
-    console.warn('⚠️ No se encontró tarjeta para marcar como fallida:', nombre);
-  }
+  }, 50);
+});
 
+// TIMER FINISHED
+socket.on('timerFinished', ({ id }) => {
+  const card = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+  if (!card) return;
+
+  const fill = card.querySelector('.progress-fill');
+  const label = card.querySelector('.tiempoRestante');
+
+  card.style.transition = "background-color 0.5s ease";
+  card.style.backgroundColor = "#6a0dad";
+  label.textContent = "⏳ Tiempo agotado";
+  fill.style.width = "0%";
+  card.dataset.estado = "agotado";
+});
+
+// CONTINUE
+socket.on('ContinueItemSearch', ({ id }) => {
   setTimeout(() => {
-    btnSolicitarItem.disabled = false;
-    btnSolicitarItem.textContent = 'Solicitar Item';
-  }, 1000);
+    const card = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+    if (!card) return;
+
+    const fill = card.querySelector('.progress-fill');
+    card.dataset.intervalActivo = "si";
+    fill.style.transition = 'width 0.5s linear';
+    card.style.transition = 'background-color 0.5s ease';
+    card.style.backgroundColor = '#34eb52';
+    setTimeout(() => card.style.backgroundColor = '#2a2a3d', 500);
+  }, 50);
 });
 
-socket.on('ContinueItemSearch', ({ nombre }) => {
-  const nombreNormalizado = nombre.toLowerCase();
+// UPDATE STATUS
+socket.on('updateItemStatus', ({ id, estado }) => {
+  setTimeout(() => {
+    const itemDiv = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+    if (!itemDiv) return;
 
-  const card = document.querySelector(`.itemCard[data-item-nombre="${nombreNormalizado}"]`);
+    const fill = itemDiv.querySelector('.progress-fill');
+    const label = itemDiv.querySelector('.tiempoRestante');
 
-  if (card) {
-    card.style.transition = 'background-color 0.5s ease, opacity 0.5s ease, transform 0.5s ease';
-    card.style.backgroundColor = '#34eb52'; // Verde
-    
-
-    setTimeout(() => {
-      card.style.backgroundColor = '#2a2a3d';
-    }, 300);
-  } else {
-    console.warn('⚠️ No se encontró tarjeta para marcar como exitosa:', nombre);
-  }
-
+    if (estado === 'setup') {
+      fill.style.transition = 'background 0.5s ease';
+      fill.style.background = '#ffb300';
+      label.textContent = '🟠 En modo setup...';
+      itemDiv.dataset.estado = 'setup';
+    } else if (estado === 'filled') {
+      fill.style.transition = 'background 0.5s ease';
+      fill.style.background = '#00c853';
+      label.textContent = '✅ Orden completada';
+      itemDiv.dataset.estado = 'filled';
+      setTimeout(() => {
+        itemDiv.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        itemDiv.style.opacity = '0';
+        itemDiv.style.transform = 'translateY(-10px)';
+        setTimeout(() => itemDiv.remove(), 500);
+      }, 500);
+    }
+  }, 50);
 });
 
+// ITEM COST
+socket.on('itemCostDetected', ({ id, cost }) => {
+  setTimeout(() => {
+    const card = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+    if (!card) return;
 
-
-// Actualizar estado desde ItemRequester
-socket.on('updateItemStatus', ({ nombre, estado }) => {
-  const nombreLower = nombre.toLowerCase();
-  const itemDiv = Array.from(itemList.children).find(d => d.dataset.itemNombre === nombreLower);
-  if (!itemDiv) return;
-
-  const fill = itemDiv.querySelector('.progress-fill');
-  const label = itemDiv.querySelector('.tiempoRestante');
-
-  if (estado === 'setup') {
-    fill.style.background = '#ffb300'; // naranja
-    label.textContent = '🟠 En modo setup...';
-    itemDiv.dataset.estado = 'setup';
-
-    setTimeout(() => {
-    btnSolicitarItem.disabled = false;
-    btnSolicitarItem.textContent = 'Solicitar Item';
-  }, 200);
-
-  } else if (estado === 'filled') {
-    fill.style.background = '#00c853'; // verde
-    label.textContent = '✅ Orden completada';
-    itemDiv.dataset.estado = 'filled';
-    setTimeout(() => {
-      itemDiv.style.opacity = '0';
-      itemDiv.style.transform = 'translateY(-10px)';
-      setTimeout(() => itemDiv.remove(), 1000);
-    }, 30000);
-  }
-});
-
-
-
-
-//Pone el costo en rojo
-socket.on('itemCostDetected', ({ nombre, cost }) => {
-  const nombreLower = nombre.toLowerCase();
-  const card = document.querySelector(`.itemCard[data-item-nombre="${nombreLower}"]`);
-
-  if (card) {
-    // Crear o actualizar elemento de precio
     let precioElem = card.querySelector('.precio');
     if (!precioElem) {
       precioElem = document.createElement('p');
       precioElem.className = 'precio';
       card.appendChild(precioElem);
     }
-    precioElem.style.color = '#d4000b'; // rojo
+
+    precioElem.style.color = '#d4000b';
     precioElem.textContent = `💰 ${cost} coins`;
+  }, 50);
+});
+
+// ITEM TOTAL
+socket.on('updateItemTotal', ({ id, precioTotal, ganancia }) => {
+  setTimeout(() => {
+    const itemDiv = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+    if (!itemDiv) return;
+
+    const prevExtras = itemDiv.querySelectorAll('.extra-info');
+    prevExtras.forEach(e => e.remove());
+
+    const totalLabel = document.createElement('p');
+    totalLabel.className = 'extra-info';
+    totalLabel.textContent = `${precioTotal} coins`;
+    totalLabel.style.color = '#006400';
+    totalLabel.style.fontSize = '14px';
+    itemDiv.appendChild(totalLabel);
+
+    const gananciaLabel = document.createElement('p');
+    gananciaLabel.className = 'extra-info';
+    gananciaLabel.textContent = `+${ganancia.toFixed(2)} coins`;
+    gananciaLabel.style.color = '#00ff00';
+    gananciaLabel.style.fontSize = '16px';
+    gananciaLabel.style.fontWeight = 'bold';
+    itemDiv.appendChild(gananciaLabel);
+  }, 50);
+});
+
+// SEARCH FOUND
+socket.on('itemSearchFound', ({ id, nombre }) => {
+  setTimeout(() => {
+    const card = document.querySelector(`.itemCard[data-item-id="${id}"]`);
+    if (!card) return;
+
+    card.style.transition = 'background-color 0.5s ease';
+    card.style.backgroundColor = '#ffeb3b';
+    setTimeout(() => card.style.backgroundColor = '#4caf50', 200);
+    setTimeout(() => card.style.backgroundColor = '#2a2a3d', 900);
+  }, 50);
+});
+
+// =================== INVENTARIO ===================
+const tabla = document.getElementById('tablaInventario');
+const btnActualizar = document.getElementById('btnActualizar');
+const btnClickSlot = document.getElementById('btnClickSlot');
+const btnClickNombre = document.getElementById('btnClickNombre');
+
+btnActualizar?.addEventListener('click', () => socket.emit('actualizarInventario'));
+btnClickSlot?.addEventListener('click', () => {
+  const slot = parseInt(document.getElementById('slotInput').value);
+  const tipo = document.getElementById('tipoSelect').value;
+  socket.emit('clickSlot', { slot, tipo });
+});
+btnClickNombre?.addEventListener('click', () => {
+  const nombre = document.getElementById('nombreInput').value.trim();
+  const tipo = document.getElementById('tipoNombreSelect').value;
+
+  socket.emit('solicitarInventarioPlain', null, (itemsPlain) => {
+    let itemBuscado = itemsPlain.find(i => i.nombreCustom === nombre && i.tipo === tipo);
+    if (!itemBuscado) itemBuscado = itemsPlain.find(i => i.nombreOriginal === nombre && i.tipo === tipo);
+    if (itemBuscado) socket.emit('clickSlot', { slot: itemBuscado.slot, tipo });
+    else alert('❌ No se encontró el item con ese nombre');
+  });
+});
+
+socket.on('inventario', (items) => {
+  tabla.innerHTML = '';
+  items.forEach(item => {
+    const fila = document.createElement('tr');
+    fila.innerHTML = `
+      <td>${item.slot}</td>
+      <td>${item.nombreOriginal}</td>
+      <td>${item.nombreCustom}</td>
+      <td>${item.id}</td>
+      <td>${item.cantidad}</td>
+      <td>${item.tipo}</td>
+    `;
+    tabla.appendChild(fila);
+  });
+});
+
+// =================== CHAT ===================
+const chatLog = document.getElementById('chatLog');
+const input = document.getElementById('mensajeInput');
+const btn = document.getElementById('enviarBtn');
+
+function agregarMensaje({ tipo, usuario, mensaje, timestamp }) {
+  const hora = new Date(timestamp).toLocaleTimeString();
+  const div = document.createElement('div');
+  if (tipo === 'chat') {
+    div.innerHTML = `<span style="color:#888;">[${hora}]</span> <span style="color:#00e676">&lt;${usuario}&gt;</span> ${mensaje}`;
+  } else {
+    div.innerHTML = `<span style="color:#888;">[${hora}]</span> <span style="color:#ffb300">[Sistema]</span> ${mensaje}`;
+  }
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+socket.on('chatMensaje', agregarMensaje);
+socket.on('mensajesPrevios', (mensajes) => mensajes.forEach(agregarMensaje));
+
+btn?.addEventListener('click', () => {
+  const texto = input.value.trim();
+  if (texto) { socket.emit('enviarComando', texto); input.value = ''; }
+});
+input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
+
+// =================== NPC FLIPS ===================
+// ================= WHITE-LIST GLOBAL (del servidor) =================
+let whitelist = {};
+
+// El servidor envía el whitelist al conectar
+socket.on("whitelistData", (data) => {
+  whitelist = data || {};
+  console.log("✅ Whitelist recibida del servidor:", whitelist);
+  cargarNPCFlips(); // ✅ Solo ahora cargamos la tabla
+});
+
+
+// ================= DOM ELEMENTOS =================
+const btnActualizarNPCFlips = document.getElementById('btnActualizarNPCFlips');
+const btnComenzarFlips = document.getElementById('btnComenzarFlips');
+const tablaNPCFlips = document.getElementById('tablaNPCFlips');
+const btnRestartCards = document.getElementById('btnRestartCards');
+
+
+// ================= FUNCIONES =================
+function cargarNPCFlips() {
+  tablaNPCFlips.innerHTML = '<tr><td colspan="12">Cargando...</td></tr>';
+  socket.emit('solicitarNPCFlips');
+}
+
+
+// ================= RENDER TABLA =================
+socket.on('npcFlipsData', (data) => {
+  tablaNPCFlips.innerHTML = ''; // Limpiamos la tabla
+
+  data.forEach((item) => {
+    const fila = document.createElement('tr');
+
+    const valores = [
+      item.nombre,
+      item.id,
+      item.buyPrice,
+      item.npcPrice,
+      item.profit,
+      item.cantidadCon1M,
+      item.profitTotal,
+      item.instasellsWeek,
+      item.instasells1h,
+      item.sellOrders,
+      item.needEnchanted ?? '',
+    ];
+
+    // Celdas normales
+    valores.forEach((val, i) => {
+      const td = document.createElement('td');
+      td.textContent = val;
+
+      if (i === 0) td.style.textAlign = 'left';
+      if (i === 4) td.style.fontWeight = 'bold';
+
+      fila.appendChild(td);
+    });
+
+    // Celda del botón WL
+    const tdBoton = document.createElement('td');
+    const btn = document.createElement('button');
+
+    btn.className = 'btnWhitelist';
+    btn.textContent = whitelist[item.id] ? '✔' : 'WL';
+
+    btn.addEventListener('click', () => {
+      // Alternar estado en el whitelist local
+      whitelist[item.id] = !whitelist[item.id];
+
+      // Guardar whitelist en el servidor
+      socket.emit("actualizarWhitelist", whitelist);
+
+      // Recargar tabla sin interferir
+      cargarNPCFlips();
+    });
+
+    tdBoton.appendChild(btn);
+    fila.appendChild(tdBoton);
+
+    tablaNPCFlips.appendChild(fila);
+  });
+});
+
+
+
+btnActualizarNPCFlips?.addEventListener('click', cargarNPCFlips);
+cargarNPCFlips();
+
+// RESTART TARJETAS
+btnRestartCards?.addEventListener('click', () => {
+  socket.emit("restartItemSystem");
+  const cards = document.querySelectorAll('.itemCard');
+  if (cards.length === 0) return;
+
+  cards.forEach(card => {
+    card.dataset.intervalActivo = "no";
+    card.style.transition = "background-color 0.5s ease, opacity 0.5s ease";
+    card.style.backgroundColor = "#8b4513";
+  });
+
+  setTimeout(() => {
+    cards.forEach(card => {
+      card.style.opacity = "0";
+      card.style.transform = "translateY(-10px)";
+      setTimeout(() => card.remove(), 500);
+    });
+  }, 2000);
+});
+
+//manualReset
+socket.on('manualReset', (id) => {
+  //socket.emit("restartItemSystem");
+  const cards = document.querySelectorAll('.itemCard');
+  if (cards.length === 0) return;
+
+  cards.forEach(card => {
+    card.dataset.intervalActivo = "no";
+    card.style.transition = "background-color 0.5s ease, opacity 0.5s ease";
+    card.style.backgroundColor = "#8b4513";
+  });
+
+  setTimeout(() => {
+    cards.forEach(card => {
+      card.style.opacity = "0";
+      card.style.transform = "translateY(-10px)";
+      setTimeout(() => card.remove(), 500);
+    });
+  }, 2000);
+
+});
+
+
+
+// COMENZAR FLIPS
+btnComenzarFlips?.addEventListener('click', () => {
+  let tiempo = parseInt(document.getElementById('itemTiempo')?.value.trim() || '300');
+  const enMinutos = (document.getElementById('itemUnidad')?.value === 'minutos');
+  if (enMinutos) tiempo *= 60;
+
+  for (const itemId in whitelist) {
+    if (whitelist[itemId]) {
+      const fila = Array.from(tablaNPCFlips.querySelectorAll('tr'))
+                        .find(r => r.cells[1]?.textContent === itemId);
+      if (!fila) continue;
+      const nombre = fila.cells[0].textContent;
+      const cantidad = parseInt(fila.cells[5].textContent) || 1;
+      const idRandom = Math.floor(Math.random() * 1000000) + 1;
+
+      socket.emit('solicitarItem', { id: idRandom, nombre, cantidad, tiempo, enMinutos });
+    }
   }
 });
 
-//Pone las ganancias totales
-socket.on('updateItemTotal', ({ nombre, cantidad, precioTotal, ganancia }) => {
-  const nombreLower = nombre.toLowerCase();
-  const itemDiv = document.querySelector(`.itemCard[data-item-nombre="${nombreLower}"]`);
-  if (!itemDiv) return;
 
-  // Limpiamos info previa
-  const prevExtras = itemDiv.querySelectorAll('.extra-info');
-  prevExtras.forEach(e => e.remove());
+socket.on('resetFinished', (id) => {
+  let tiempo = parseInt(document.getElementById('itemTiempo')?.value.trim() || '300');
+  const enMinutos = (document.getElementById('itemUnidad')?.value === 'minutos');
+  if (enMinutos) tiempo *= 60;
 
-  // Precio total en verde oscuro
-  const totalLabel = document.createElement('p');
-  totalLabel.className = 'extra-info';
-  totalLabel.textContent = `${precioTotal} coins`;
-  totalLabel.style.color = '#006400'; // verde oscuro
-  totalLabel.style.fontSize = '14px';
-  itemDiv.appendChild(totalLabel);
+  for (const itemId in whitelist) {
+    if (whitelist[itemId]) {
+      const fila = Array.from(tablaNPCFlips.querySelectorAll('tr'))
+                        .find(r => r.cells[1]?.textContent === itemId);
+      if (!fila) continue;
+      const nombre = fila.cells[0].textContent;
+      const cantidad = parseInt(fila.cells[5].textContent) || 1;
+      const idRandom = Math.floor(Math.random() * 1000000) + 1;
 
-  // Ganancia en verde clarito con + y fuente más grande
-  const gananciaLabel = document.createElement('p');
-  gananciaLabel.className = 'extra-info';
-  gananciaLabel.textContent = `+${ganancia} coins`;
-  gananciaLabel.style.color = '#00ff00'; // verde clarito
-  gananciaLabel.style.fontSize = '16px'; // un poco más grande
-  gananciaLabel.style.fontWeight = 'bold';
-  itemDiv.appendChild(gananciaLabel);
+      //socket.emit('solicitarItem', { id: idRandom, nombre, cantidad, tiempo, enMinutos });
+    }
+  }
 });
 
 
 
 
+// =================== PURSE ===================
+document.addEventListener('DOMContentLoaded', () => {
+  const purseDisplay = document.getElementById('purse-display');
+  const gainDisplay = document.getElementById('purse-gain-display');
 
+  let initialValue = null;
+  let previousValue = null;
+  let updateCount = 0; // contador de purseUpdates
 
-</script>
+  socket.on('purseUpdate', ({ value }) => {
+    console.log("=== NUEVO purseUpdate ===");
+    console.log("Valor recibido (string):", value);
 
-  <!-- =================== SECCIÓN DE CHAT =================== -->
-  <div id="chatContainer">
-    <h2>💬 Chat del Servidor</h2>
-    <div id="chatLog"></div>
-    <div id="chatInputContainer">
-      <input id="mensajeInput" type="text" placeholder="Escribe un mensaje o comando..." />
-      <button id="enviarBtn">Enviar</button>
-    </div>
-  </div>
+    // Detectar valores incompletos: DEBEN TENER 3 PARTES (ej. 108,184,911)
+    const parts = value.split(',');
+    if (parts.length !== 3) {
+      console.log("Valor incompleto detectado. Ignorado:", value);
+      console.log("==========================\n");
+      return;
+    }
 
-  <script>
+    purseDisplay.textContent = value;
 
-    // =================== INVENTARIO ===================
-    const tabla = document.getElementById('tablaInventario');
-    const btnActualizar = document.getElementById('btnActualizar');
-    const btnClickSlot = document.getElementById('btnClickSlot');
-    const btnClickNombre = document.getElementById('btnClickNombre');
+    const numericValue = Number(value.replace(/,/g, ''));
+    console.log("Valor numérico:", numericValue);
 
-    btnActualizar.onclick = () => socket.emit('actualizarInventario');
-    btnClickSlot.onclick = () => {
-      const slot = parseInt(document.getElementById('slotInput').value);
-      const tipo = document.getElementById('tipoSelect').value;
-      socket.emit('clickSlot', { slot, tipo });
-    };
+    if (numericValue != 0) {
+      updateCount++;
+      console.log("UpdateCount incrementado:", updateCount);
 
-    btnClickNombre.onclick = () => {
-      const nombre = document.getElementById('nombreInput').value.trim();
-      const tipo = document.getElementById('tipoNombreSelect').value;
-
-      socket.emit('solicitarInventarioPlain', null, (itemsPlain) => {
-        let itemBuscado = itemsPlain.find(i => i.nombreCustom === nombre && i.tipo === tipo);
-        if (!itemBuscado) itemBuscado = itemsPlain.find(i => i.nombreOriginal === nombre && i.tipo === tipo);
-        if (itemBuscado) socket.emit('clickSlot', { slot: itemBuscado.slot, tipo });
-        else alert('❌ No se encontró el item con ese nombre (ni custom ni original)');
-      });
-    };
-
-    socket.on('inventario', (items) => {
-      tabla.innerHTML = '';
-      items.forEach(item => {
-        const fila = document.createElement('tr');
-        fila.innerHTML = `
-          <td>${item.slot}</td>
-          <td>${item.nombreOriginal}</td>
-          <td>${item.nombreCustom}</td>
-          <td>${item.id}</td>
-          <td>${item.cantidad}</td>
-          <td>${item.tipo}</td>
-        `;
-        tabla.appendChild(fila);
-      });
-    });
-
-
-    // =================== CHAT ===================
-    const chatLog = document.getElementById('chatLog');
-    const input = document.getElementById('mensajeInput');
-    const btn = document.getElementById('enviarBtn');
-
-    function agregarMensaje({ tipo, usuario, mensaje, timestamp }) {
-      const hora = new Date(timestamp).toLocaleTimeString();
-      const div = document.createElement('div');
-      if (tipo === 'chat') {
-        div.innerHTML = `<span style="color:#888;">[${hora}]</span> <span style="color:#00e676">&lt;${usuario}&gt;</span> ${mensaje}`;
-      } else {
-        div.innerHTML = `<span style="color:#888;">[${hora}]</span> <span style="color:#ffb300">[Sistema]</span> ${mensaje}`;
+      // El segundo update marca el valor inicial correcto
+      if (updateCount === 2) {
+        initialValue = numericValue;
+        console.log("Inicial establecido:", initialValue);
       }
-      chatLog.appendChild(div);
-      chatLog.scrollTop = chatLog.scrollHeight;
     }
 
-    socket.on('chatMensaje', agregarMensaje);
-    socket.on('mensajesPrevios', (mensajes) => mensajes.forEach(agregarMensaje));
+    console.log("PreviousValue antes de comparar:", previousValue);
 
-    btn.onclick = () => {
-      const texto = input.value.trim();
-      if (texto) { socket.emit('enviarComando', texto); input.value = ''; }
-    };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
-
-    // =================== WEB INVENTORY VIEWER ===================
-    function cargarViewer() {
-      const iframe = document.getElementById('webInventoryFrame');
-      fetch('/viewer-port')
-        .then(res => res.json())
-        .then(data => { iframe.src = `http://localhost:${data.port}/`; })
-        .catch(err => console.error('No se pudo cargar el inventoryViewer:', err));
+    if (numericValue === previousValue) {
+      console.log("El valor es igual al anterior. No actualizamos.");
+      console.log("==========================\n");
+      return;
     }
-    cargarViewer();
-    socket.on('viewer-update', () => cargarViewer());
 
-  </script>
+    previousValue = numericValue;
+    console.log("PreviousValue actualizado a:", previousValue);
 
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const purseDisplay = document.getElementById('purse-display');
+    let gain = 0;
 
-    socket.on('purseUpdate', ({ value }) => {
-      console.log('Purse recibido del servidor:', value);
-      purseDisplay.textContent = value;
-    });
+    // Solo calculamos ganancia cuando ya existe un initialValue REAL
+    if (initialValue !== null) {
+      gain = numericValue - initialValue;
+      console.log(`Ganancia calculada: ${numericValue} - ${initialValue} = ${gain}`);
+    }
+
+    gainDisplay.textContent = gain.toLocaleString();
+    gainDisplay.style.color = gain >= 0 ? "#00ff00" : "#ff4444";
+
+    console.log("Ganancia mostrada:", gain.toLocaleString());
+    console.log("==========================\n");
   });
+
+});
+
+
 </script>
+
 
 </body>
 </html>
+
+
+

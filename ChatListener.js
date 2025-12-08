@@ -25,23 +25,26 @@ class ChatListener {
     this.usuarios = opciones.usuarios || null
     this.mensajesExactos = opciones.mensajesExactos || null
     this.palabras = opciones.palabras || null
-    this.excluirPalabras = opciones.excluirPalabras || null // 🆕 NUEVO FILTRO
+    this.excluirPalabras = opciones.excluirPalabras || null
     this.tipos = opciones.tipos || ['chat', 'sistema']
     this.callback = opciones.callback || null
+
+    // 🆕 Guardaremos aquí los listeners para poder eliminarlos
+    this._listeners = []
 
     this.iniciarEscucha()
   }
 
   iniciarEscucha() {
     // 🗣️ CHAT DE JUGADORES
-    this.bot.on('chat', (username, mensaje) => {
+    const handlerChat = (username, mensaje) => {
       if (!this.tipos.includes('chat')) return
       if (this.usuarios && !this.usuarios.includes(username)) return
       if (this.mensajesExactos && !this.mensajesExactos.includes(mensaje)) return
 
       const mensajeLower = mensaje.toLowerCase()
 
-      // ✅ Filtro de inclusión (palabras obligatorias)
+      // Filtro de inclusión
       if (this.palabras) {
         const coincide = this.palabras.some(p =>
           mensajeLower.includes(p.toLowerCase())
@@ -49,7 +52,7 @@ class ChatListener {
         if (!coincide) return
       }
 
-      // 🚫 Filtro de exclusión (palabras prohibidas)
+      // Filtro de exclusión
       if (this.excluirPalabras) {
         const contieneProhibida = this.excluirPalabras.some(p =>
           mensajeLower.includes(p.toLowerCase())
@@ -67,22 +70,26 @@ class ChatListener {
       this.mensajes.push(registro)
       console.log(`[CHAT] <${username}>: ${mensaje}`)
       if (this.callback) this.callback(registro)
-    })
+    }
+
+    this.bot.on('chat', handlerChat)
+    this._listeners.push({ event: 'chat', handler: handlerChat })
+
 
     // ⚙️ MENSAJES DEL SERVIDOR
-    this.bot.on('message', (jsonMsg) => {
+    const handlerMessage = (jsonMsg) => {
       if (!this.tipos.includes('sistema')) return
       const textoPlano = jsonMsg.toString().trim()
       const textoLower = textoPlano.toLowerCase()
 
-      // ✅ Filtro de inclusión
+      // Filtro de inclusión
       if (this.mensajesExactos && !this.mensajesExactos.includes(textoPlano)) return
       if (this.palabras) {
         const coincide = this.palabras.some(p => textoLower.includes(p.toLowerCase()))
         if (!coincide) return
       }
 
-      // 🚫 Filtro de exclusión
+      // Filtro de exclusión
       if (this.excluirPalabras) {
         const contieneProhibida = this.excluirPalabras.some(p =>
           textoLower.includes(p.toLowerCase())
@@ -99,50 +106,65 @@ class ChatListener {
       this.mensajes.push(registro)
       console.log(`[SERVIDOR] ${textoPlano}`)
       if (this.callback) this.callback(registro)
-    })
+    }
+
+    this.bot.on('message', handlerMessage)
+    this._listeners.push({ event: 'message', handler: handlerMessage })
   }
 
   /**
-   * 📜 Devuelve los últimos N mensajes recibidos
-   * @param {number} n - cantidad de mensajes (por defecto 10)
+   * 🧹 Limpia TODOS los listeners creados por este ChatListener
    */
+  removeListeners() {
+    if (!this.bot || !this._listeners) return
+
+    for (const { event, handler } of this._listeners) {
+      this.bot.removeListener(event, handler)
+    }
+
+    this._listeners = []
+  }
+
   obtenerUltimos(n = 10) {
     return this.mensajes.slice(-n)
   }
 
-  /**
-   * 💬 Envía un mensaje o comando al servidor
-   * @param {string} texto - mensaje o comando (puede incluir '/')
-   */
   enviar(texto) {
     if (!texto || typeof texto !== 'string') return
     console.log(`📤 Enviando: ${texto}`)
     this.bot.chat(texto)
   }
 
-
   onMensajeContiene(texto, callback) {
     if (!texto || typeof callback !== 'function') return
 
-    this.bot.on('chat', (username, mensaje) => {
+    const handlerChat = (username, mensaje) => {
       const mensajeLower = mensaje.toLowerCase()
       const patron = typeof texto === 'string' ? texto.toLowerCase() : texto
-      if (typeof patron === 'string' && mensajeLower.includes(patron)) callback({ tipo: 'chat', usuario: username, mensaje })
-      else if (patron instanceof RegExp && patron.test(mensaje)) callback({ tipo: 'chat', usuario: username, mensaje })
-    })
+      if (typeof patron === 'string' && mensajeLower.includes(patron)) {
+        callback({ tipo: 'chat', usuario: username, mensaje })
+      } else if (patron instanceof RegExp && patron.test(mensaje)) {
+        callback({ tipo: 'chat', usuario: username, mensaje })
+      }
+    }
 
-    this.bot.on('message', (jsonMsg) => {
+    const handlerMessage = (jsonMsg) => {
       const textoPlano = jsonMsg.toString().trim()
       const textoLower = textoPlano.toLowerCase()
       const patron = typeof texto === 'string' ? texto.toLowerCase() : texto
-      if (typeof patron === 'string' && textoLower.includes(patron)) callback({ tipo: 'sistema', mensaje: textoPlano })
-      else if (patron instanceof RegExp && patron.test(textoPlano)) callback({ tipo: 'sistema', mensaje: textoPlano })
-    })
+      if (typeof patron === 'string' && textoLower.includes(patron)) {
+        callback({ tipo: 'sistema', mensaje: textoPlano })
+      } else if (patron instanceof RegExp && patron.test(textoPlano)) {
+        callback({ tipo: 'sistema', mensaje: textoPlano })
+      }
+    }
+
+    this.bot.on('chat', handlerChat)
+    this.bot.on('message', handlerMessage)
+
+    this._listeners.push({ event: 'chat', handler: handlerChat })
+    this._listeners.push({ event: 'message', handler: handlerMessage })
   }
-
-
-
-
 }
 
 module.exports = ChatListener
