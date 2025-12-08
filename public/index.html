@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel del Bot (Inventario + Chat)</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* =================== ESTILOS GENERALES =================== */
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #1e1e2f;
+      color: #f1f1f1;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    h1, h2 { color: #00bcd4; }
+
+    input, select, button {
+      padding: 8px;
+      border-radius: 5px;
+      border: none;
+      margin: 5px;
+    }
+
+    button {
+      background: #00bcd4;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    button:hover { background: #0197a6; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td { border: 1px solid #444; padding: 10px; }
+    tr:nth-child(even) { background-color: #2a2a3d; }
+
+    /* =================== SECCIÓN DE INVENTARIO =================== */
+    #inventarioContainer {
+      display: flex;
+      justify-content: space-between;
+      margin: 20px;
+    }
+
+    #tablaContainer {
+      flex: 1;
+      margin-right: 20px;
+      overflow-x: auto;
+    }
+
+    #tablaScroll {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #444;
+      border-radius: 8px;
+    }
+
+    iframe#webInventoryFrame {
+      width: 400px;
+      height: 400px;
+      border: 1px solid #444;
+      border-radius: 8px;
+    }
+
+    /* =================== SECCIÓN DE CHAT =================== */
+    #chatContainer {
+      background-color: #2a2a3d;
+      border-top: 2px solid #00bcd4;
+      padding: 10px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #chatLog {
+      flex: 1;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #1e1e2f;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 14px;
+      text-align: left;
+    }
+
+    #chatInputContainer { display: flex; margin-top: 10px; }
+
+    #mensajeInput {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: #333;
+      color: #fff;
+      margin-right: 10px;
+    }
+
+    #enviarBtn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: #00bcd4;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #enviarBtn:hover { background: #0197a6; }
+
+    /* =================== NUEVA SECCIÓN: ITEMS SOLICITADOS =================== */
+    #itemsSolicitadosContainer {
+      margin: 20px;
+    }
+
+    #itemsSolicitadosList {
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 10px;
+      margin-top: 15px;
+      padding-bottom: 10px;
+    }
+
+    .itemCard {
+      background-color: #ad680e;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 15px;
+      min-width: 150px;
+      text-align: center;
+      flex-shrink: 0;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .itemCard h3 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+      color: #00bcd4;
+    }
+
+    .itemCard p {
+      margin: 5px 0;
+    }
+
+    /* Scrollbar horizontal */
+    #itemsSolicitadosList::-webkit-scrollbar {
+      height: 8px;
+    }
+    #itemsSolicitadosList::-webkit-scrollbar-thumb {
+      background-color: #00bcd4;
+      border-radius: 4px;
+    }
+    #itemsSolicitadosList::-webkit-scrollbar-track {
+      background-color: #1e1e2f;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🧱 Inventario del Bot</h1>
+
+  <!-- =================== SECCIÓN DE INVENTARIO =================== -->
+  <div id="inventarioContainer">
+    <div id="tablaContainer">
+      <button id="btnActualizar">Actualizar Inventario</button>
+      <div style="margin:20px;">
+        <input id="slotInput" type="number" placeholder="Slot..." />
+        <select id="tipoSelect">
+          <option value="inventario">Inventario</option>
+          <option value="contenedor">Contenedor</option>
+        </select>
+        <button id="btnClickSlot">Click por Slot</button>
+      </div>
+
+      <div style="margin:20px;">
+        <input id="nombreInput" type="text" placeholder="Nombre del item..." />
+        <select id="tipoNombreSelect">
+          <option value="inventario">Inventario</option>
+          <option value="contenedor">Contenedor</option>
+        </select>
+        <button id="btnClickNombre">Click por Nombre</button>
+      </div>
+
+      <div id="tablaScroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Slot</th>
+              <th>Nombre Original</th>
+              <th>Nombre Custom</th>
+              <th>ID</th>
+              <th>Cantidad</th>
+              <th>Tipo</th>
+            </tr>
+          </thead>
+          <tbody id="tablaInventario"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <iframe id="webInventoryFrame"></iframe>
+  </div>
+
+<!-- =================== NUEVA SECCIÓN: Items Solicitados =================== -->
+<div id="itemsSolicitadosContainer" style="margin:20px;">
+  <h2>📦 Items Solicitados</h2>
+
+  <!-- Inputs y botón -->
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+    <input id="itemNombre" type="text" placeholder="Nombre del item..." />
+    <input id="itemCantidad" type="number" placeholder="Cantidad..." min="1" />
+    <input id="itemTiempo" type="number" placeholder="Tiempo..." min="1" />
+    <select id="itemUnidad">
+      <option value="segundos">Segundos</option>
+      <option value="minutos">Minutos</option>
+    </select>
+    <button id="btnSolicitarItem">Solicitar Item</button>
+  </div>
+
+  <!-- Contenedor de items -->
+  <div id="itemsSolicitadosList" style="display:flex;gap:10px;overflow-x:auto;padding:10px 0;"></div>
+</div>
+
+<style>
+/* =================== ESTILOS ITEMS SOLICITADOS =================== */
+.itemCard {
+  flex: 0 0 auto; /* Evita que se encoja */
+  background: #e4e016;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 10px;
+  width: 150px;
+  box-sizing: border-box;
+  font-family: monospace;
+  position: relative;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.itemCard h3 {
+  margin: 0 0 5px 0;
+  font-size: 14px;
+}
+
+.itemCard p {
+  margin: 3px 0;
+  font-size: 12px;
+}
+
+.progress-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: #555;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 100%;
+  background: #00bcd4;
+  transition: width 0.3s linear, background 0.3s linear;
+}
+
+
+.itemCard {
+  transition: background-color 0.5s ease, opacity 0.5s ease, transform 0.5s ease;
+}
+
+.itemCard[data-estado="fallido"] {
+  background-color: #8b0000; /* rojo oscuro */
+  color: white; /* texto blanco para contraste */
+  border: 1px solid #ff4d4d;
+}
+
+
+</style>
+<!-- -------------------- Contenedor del Purse -------------------- -->
+<div id="purse-container">
+  <span id="purse-label">Purse:</span>
+  <span id="purse-display">0</span>
+</div>
+
+<style>
+  /* -------------------- Estilos del contenedor -------------------- */
+  #purse-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(to right, #FFD700 0%, #FFA500 100%);
+    padding: 10px 20px;
+    border-radius: 10px;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    font-family: 'Minecraft', sans-serif;
+    z-index: 9999;
+  }
+
+  /* -------------------- Etiqueta "Purse:" -------------------- */
+  #purse-label {
+    font-weight: bold;
+    color: #fff;
+    margin-right: 10px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  }
+
+  /* -------------------- Valor del Purse -------------------- */
+  #purse-display {
+    font-size: 2em;
+    font-weight: bold;
+    color: #ffeb3b; /* dorado brillante */
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  }
+</style>
+
+<!-- -------------------- Script para actualizar Purse -------------------- -->
+
+
+
+<script>
+      // =================== SOCKET.IO ===================
+    const socket = io();
+
+// =================== LÓGICA ITEMS SOLICITADOS ===================
+const btnSolicitarItem = document.getElementById('btnSolicitarItem');
+const itemList = document.getElementById('itemsSolicitadosList');
+
+btnSolicitarItem.onclick = () => {
+  const nombre = document.getElementById('itemNombre').value.trim();
+  const cantidad = parseInt(document.getElementById('itemCantidad').value.trim());
+  let tiempo = parseInt(document.getElementById('itemTiempo').value.trim());
+  const enMinutos = document.getElementById('itemUnidad').value === 'minutos';
+
+  if (!nombre || isNaN(cantidad) || isNaN(tiempo)) {
+    alert('❌ Debes completar todos los campos correctamente.');
+    return;
+  }
+
+  if (enMinutos) tiempo *= 60; // Convertir a segundos
+
+  // Emitir al servidor para crear ItemRequester
+  socket.emit('solicitarItem', { nombre, cantidad, tiempo, enMinutos });
+
+  // Ya no desactivamos el botón
+  // btnSolicitarItem.disabled = true;
+  // btnSolicitarItem.textContent = '⏳ Creando...';
+};
+
+// Crear tarjeta en el frontend cuando el servidor confirma
+socket.on('itemAdded', ({ nombre, cantidad, tiempo }) => {
+  const id = nombre.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+  const div = document.createElement('div');
+  div.id = id;
+  div.className = 'itemCard';
+  div.dataset.itemNombre = nombre.toLowerCase();
+  div.dataset.estado = 'activo';
+  
+  div.innerHTML = `
+    <h3>${nombre}</h3>
+    <p>Cantidad: ${cantidad}</p>
+    <p class="tiempoRestante">Tiempo restante: ${tiempo}s</p>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:#d4000b;"></div></div>
+  `;
+  itemList.appendChild(div);
+  itemList.scrollLeft = itemList.scrollWidth;
+
+  const fill = div.querySelector('.progress-fill');
+  const label = div.querySelector('.tiempoRestante');
+  const total = tiempo;
+  let remaining = tiempo;
+
+  const interval = setInterval(() => {
+    remaining--;
+    if (remaining < 0) remaining = 0;
+    const percent = (remaining / total) * 100;
+    fill.style.width = percent + '%';
+    label.textContent = `Tiempo restante: ${remaining}s`;
+
+    if (remaining <= 0 && div.dataset.estado === 'activo') {
+      clearInterval(interval);
+      div.style.opacity = '0';
+      div.style.transform = 'translateY(-10px)';
+      setTimeout(() => div.remove(), 500);
+    }
+  }, 1000);
+});
+
+
+
+
+socket.on('stopItemSearch', ({ nombre }) => {
+  const nombreNormalizado = nombre.toLowerCase();
+
+  const card = document.querySelector(`.itemCard[data-item-nombre="${nombreNormalizado}"]`);
+
+  if (card) {
+    card.style.transition = 'background-color 0.5s ease, opacity 0.5s ease, transform 0.5s ease';
+    card.style.backgroundColor = '#8b0000'; // rojo oscuro
+    card.dataset.estado = 'fallido';
+
+    setTimeout(() => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(-10px)';
+      setTimeout(() => card.remove(), 600);
+    }, 1000);
+  } else {
+    console.warn('⚠️ No se encontró tarjeta para marcar como fallida:', nombre);
+  }
+
+  setTimeout(() => {
+    btnSolicitarItem.disabled = false;
+    btnSolicitarItem.textContent = 'Solicitar Item';
+  }, 1000);
+});
+
+socket.on('ContinueItemSearch', ({ nombre }) => {
+  const nombreNormalizado = nombre.toLowerCase();
+
+  const card = document.querySelector(`.itemCard[data-item-nombre="${nombreNormalizado}"]`);
+
+  if (card) {
+    card.style.transition = 'background-color 0.5s ease, opacity 0.5s ease, transform 0.5s ease';
+    card.style.backgroundColor = '#34eb52'; // Verde
+    
+
+    setTimeout(() => {
+      card.style.backgroundColor = '#2a2a3d';
+    }, 300);
+  } else {
+    console.warn('⚠️ No se encontró tarjeta para marcar como exitosa:', nombre);
+  }
+
+});
+
+
+
+// Actualizar estado desde ItemRequester
+socket.on('updateItemStatus', ({ nombre, estado }) => {
+  const nombreLower = nombre.toLowerCase();
+  const itemDiv = Array.from(itemList.children).find(d => d.dataset.itemNombre === nombreLower);
+  if (!itemDiv) return;
+
+  const fill = itemDiv.querySelector('.progress-fill');
+  const label = itemDiv.querySelector('.tiempoRestante');
+
+  if (estado === 'setup') {
+    fill.style.background = '#ffb300'; // naranja
+    label.textContent = '🟠 En modo setup...';
+    itemDiv.dataset.estado = 'setup';
+
+    setTimeout(() => {
+    btnSolicitarItem.disabled = false;
+    btnSolicitarItem.textContent = 'Solicitar Item';
+  }, 200);
+
+  } else if (estado === 'filled') {
+    fill.style.background = '#00c853'; // verde
+    label.textContent = '✅ Orden completada';
+    itemDiv.dataset.estado = 'filled';
+    setTimeout(() => {
+      itemDiv.style.opacity = '0';
+      itemDiv.style.transform = 'translateY(-10px)';
+      setTimeout(() => itemDiv.remove(), 1000);
+    }, 30000);
+  }
+});
+
+
+
+
+//Pone el costo en rojo
+socket.on('itemCostDetected', ({ nombre, cost }) => {
+  const nombreLower = nombre.toLowerCase();
+  const card = document.querySelector(`.itemCard[data-item-nombre="${nombreLower}"]`);
+
+  if (card) {
+    // Crear o actualizar elemento de precio
+    let precioElem = card.querySelector('.precio');
+    if (!precioElem) {
+      precioElem = document.createElement('p');
+      precioElem.className = 'precio';
+      card.appendChild(precioElem);
+    }
+    precioElem.style.color = '#d4000b'; // rojo
+    precioElem.textContent = `💰 ${cost} coins`;
+  }
+});
+
+//Pone las ganancias totales
+socket.on('updateItemTotal', ({ nombre, cantidad, precioTotal, ganancia }) => {
+  const nombreLower = nombre.toLowerCase();
+  const itemDiv = document.querySelector(`.itemCard[data-item-nombre="${nombreLower}"]`);
+  if (!itemDiv) return;
+
+  // Limpiamos info previa
+  const prevExtras = itemDiv.querySelectorAll('.extra-info');
+  prevExtras.forEach(e => e.remove());
+
+  // Precio total en verde oscuro
+  const totalLabel = document.createElement('p');
+  totalLabel.className = 'extra-info';
+  totalLabel.textContent = `${precioTotal} coins`;
+  totalLabel.style.color = '#006400'; // verde oscuro
+  totalLabel.style.fontSize = '14px';
+  itemDiv.appendChild(totalLabel);
+
+  // Ganancia en verde clarito con + y fuente más grande
+  const gananciaLabel = document.createElement('p');
+  gananciaLabel.className = 'extra-info';
+  gananciaLabel.textContent = `+${ganancia} coins`;
+  gananciaLabel.style.color = '#00ff00'; // verde clarito
+  gananciaLabel.style.fontSize = '16px'; // un poco más grande
+  gananciaLabel.style.fontWeight = 'bold';
+  itemDiv.appendChild(gananciaLabel);
+});
+
+
+
+
+
+
+</script>
+
+  <!-- =================== SECCIÓN DE CHAT =================== -->
+  <div id="chatContainer">
+    <h2>💬 Chat del Servidor</h2>
+    <div id="chatLog"></div>
+    <div id="chatInputContainer">
+      <input id="mensajeInput" type="text" placeholder="Escribe un mensaje o comando..." />
+      <button id="enviarBtn">Enviar</button>
+    </div>
+  </div>
+
+  <script>
+
+    // =================== INVENTARIO ===================
+    const tabla = document.getElementById('tablaInventario');
+    const btnActualizar = document.getElementById('btnActualizar');
+    const btnClickSlot = document.getElementById('btnClickSlot');
+    const btnClickNombre = document.getElementById('btnClickNombre');
+
+    btnActualizar.onclick = () => socket.emit('actualizarInventario');
+    btnClickSlot.onclick = () => {
+      const slot = parseInt(document.getElementById('slotInput').value);
+      const tipo = document.getElementById('tipoSelect').value;
+      socket.emit('clickSlot', { slot, tipo });
+    };
+
+    btnClickNombre.onclick = () => {
+      const nombre = document.getElementById('nombreInput').value.trim();
+      const tipo = document.getElementById('tipoNombreSelect').value;
+
+      socket.emit('solicitarInventarioPlain', null, (itemsPlain) => {
+        let itemBuscado = itemsPlain.find(i => i.nombreCustom === nombre && i.tipo === tipo);
+        if (!itemBuscado) itemBuscado = itemsPlain.find(i => i.nombreOriginal === nombre && i.tipo === tipo);
+        if (itemBuscado) socket.emit('clickSlot', { slot: itemBuscado.slot, tipo });
+        else alert('❌ No se encontró el item con ese nombre (ni custom ni original)');
+      });
+    };
+
+    socket.on('inventario', (items) => {
+      tabla.innerHTML = '';
+      items.forEach(item => {
+        const fila = document.createElement('tr');
+        fila.innerHTML = `
+          <td>${item.slot}</td>
+          <td>${item.nombreOriginal}</td>
+          <td>${item.nombreCustom}</td>
+          <td>${item.id}</td>
+          <td>${item.cantidad}</td>
+          <td>${item.tipo}</td>
+        `;
+        tabla.appendChild(fila);
+      });
+    });
+
+
+    // =================== CHAT ===================
+    const chatLog = document.getElementById('chatLog');
+    const input = document.getElementById('mensajeInput');
+    const btn = document.getElementById('enviarBtn');
+
+    function agregarMensaje({ tipo, usuario, mensaje, timestamp }) {
+      const hora = new Date(timestamp).toLocaleTimeString();
+      const div = document.createElement('div');
+      if (tipo === 'chat') {
+        div.innerHTML = `<span style="color:#888;">[${hora}]</span> <span style="color:#00e676">&lt;${usuario}&gt;</span> ${mensaje}`;
+      } else {
+        div.innerHTML = `<span style="color:#888;">[${hora}]</span> <span style="color:#ffb300">[Sistema]</span> ${mensaje}`;
+      }
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    socket.on('chatMensaje', agregarMensaje);
+    socket.on('mensajesPrevios', (mensajes) => mensajes.forEach(agregarMensaje));
+
+    btn.onclick = () => {
+      const texto = input.value.trim();
+      if (texto) { socket.emit('enviarComando', texto); input.value = ''; }
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
+
+    // =================== WEB INVENTORY VIEWER ===================
+    function cargarViewer() {
+      const iframe = document.getElementById('webInventoryFrame');
+      fetch('/viewer-port')
+        .then(res => res.json())
+        .then(data => { iframe.src = `http://localhost:${data.port}/`; })
+        .catch(err => console.error('No se pudo cargar el inventoryViewer:', err));
+    }
+    cargarViewer();
+    socket.on('viewer-update', () => cargarViewer());
+
+  </script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const purseDisplay = document.getElementById('purse-display');
+
+    socket.on('purseUpdate', ({ value }) => {
+      console.log('Purse recibido del servidor:', value);
+      purseDisplay.textContent = value;
+    });
+  });
+</script>
+
+</body>
+</html>
