@@ -60,7 +60,6 @@ class ItemRequester extends EventEmitter {
     }, 1000);
   } 
 
-
   async esperar(ms) {
     const inicio = Date.now();
     while (Date.now() - inicio < ms) {
@@ -138,8 +137,6 @@ class ItemRequester extends EventEmitter {
     console.error("Error al destruir ItemRequester:", err);
   }
 }
-
-
 
   limpiarNombre(itemName) {
   if (!itemName) return "";
@@ -267,11 +264,6 @@ class ItemRequester extends EventEmitter {
             }
             
           }
-
-
-
-
-
     }
 
 
@@ -314,9 +306,7 @@ class ItemRequester extends EventEmitter {
       return; // terminamos la ejecución de start
     }
 
-//------------------------ RESTART -----------------------------
-
-
+//_____________________________________________
 
 
     try {
@@ -367,10 +357,11 @@ class ItemRequester extends EventEmitter {
       await this.container.click({ nombreCustom: "Buy Order", tipo: 'contenedor' });
 
       this.emit('finished');
-
+      this.emit('itemBought', {nombre: this.customName});
     } catch (err) {
       console.error(`Error en ItemRequester para "${this.customName}":`, err);
       this.emit('finished');
+      
     }
   }
 

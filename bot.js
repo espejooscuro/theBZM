@@ -54,6 +54,13 @@ async function startBot() {
       }
     );
 
+
+    bot.on('duplicateBoughtReset', ({ nombre }) => {
+        console.log(`Cerrando programa... se detectaron 3 compras de: ${nombre}`);
+        bot.emit('DupeReset');
+    });
+
+
     bot.once('spawn', async () => {
       try {
         const estado = fs.existsSync(estadoPath)

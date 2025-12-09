@@ -23,6 +23,7 @@ class Panel {
     this.filledProcesados = new Set();
     this.ultimoCantidad = {}; // { nombreItem: cantidad } 
     this.ultimoTiempo = {};  
+    this.ultimosComprados = [];
 
     this.chat = new ChatListener(bot, {
       excluirPalabras: ['APPEARING OFFLINE', '✎ Mana'],
@@ -105,8 +106,6 @@ class Panel {
     return JSON.parse(this.invListener.obtenerInventario());
   }
 
-
-
   async destroy() {
   console.log("🧹 Cerrando Panel...");
 
@@ -146,9 +145,6 @@ class Panel {
 
   console.log("✅ Panel destruido correctamente");
 }
-
-
-
 
   //Reset manual usado al principio de la ejecucón para comenzar el reset y todos los itemRequesters
   manualReset() {
@@ -218,98 +214,113 @@ class Panel {
   this.io.emit("itemSystemRestarted");
 }
 
+  async handleResetFinished(id) {
+    console.log(`♻️ [PANEL] resetFinished recibido de ID ${id}`);
 
+    // ------------------------------------------------
+    // 1️⃣ Obtener datos por defecto del reset
+    // ------------------------------------------------
+    let tiempo = this.defaultResetTime ?? 300; 
+    let enMinutos = this.defaultUnidadMinutos ?? false;
 
-async handleResetFinished(id) {
-  console.log(`♻️ [PANEL] resetFinished recibido de ID ${id}`);
+    if (enMinutos) tiempo *= 60;
 
-  // ------------------------------------------------
-  // 1️⃣ Obtener datos por defecto del reset
-  // ------------------------------------------------
-  let tiempo = this.defaultResetTime ?? 300; 
-  let enMinutos = this.defaultUnidadMinutos ?? false;
+    // ------------------------------------------------
+    // 2️⃣ Leer whitelist actual
+    // ------------------------------------------------
+    if (!this.whitelist) {
+      console.warn("⚠️ No hay whitelist configurada en el panel.");
+      return;
+    }
 
-  if (enMinutos) tiempo *= 60;
+    const whitelistIds = Object.keys(this.whitelist).filter(k => this.whitelist[k]);
+    if (whitelistIds.length === 0) {
+      console.log("⚠️ No hay items activos en la whitelist, nada que reiniciar.");
+      return;
+    }
 
-  // ------------------------------------------------
-  // 2️⃣ Leer whitelist actual
-  // ------------------------------------------------
-  if (!this.whitelist) {
-    console.warn("⚠️ No hay whitelist configurada en el panel.");
-    return;
+    // ------------------------------------------------
+    // 3️⃣ Obtener datos actualizados desde SkyBlock API
+    // ------------------------------------------------
+    let topItems = [];
+    try {
+      topItems = await this.skyblock.obtenerTop30NPCFlips();
+    } catch (err) {
+      console.error("Error obteniendo top NPC flips:", err);
+      return;
+    }
+
+    // ------------------------------------------------
+    // 4️⃣ Filtrar solo los que están en la whitelist
+    // ------------------------------------------------
+    const itemsAReiniciar = topItems.filter(item => whitelistIds.includes(item.id));
+
+    if (itemsAReiniciar.length === 0) {
+      console.log("⚠️ Ningún item del whitelist aparece en el top30. Abortando reinicio.");
+      return;
+    }
+
+    // ------------------------------------------------
+    // 5️⃣ Crear requesters para cada item filtrado
+    // ------------------------------------------------
+    for (const item of itemsAReiniciar) {
+      const idRandom = Math.floor(Math.random() * 1000000) + 1;
+      const nombre = item.nombre;
+      const cantidad = item.cantidadCon1M; // o la que quieras usar
+
+      console.log(`🎯 Reiniciando item: ${nombre} x${cantidad}`);
+
+      const requester = new ItemRequester(this.bot, idRandom, nombre, cantidad, tiempo, enMinutos);
+      requester.panel = this;
+      this.asignarListeners(requester);
+      this.io.emit('itemAdded', { id: idRandom, nombre, cantidad, tiempo });
+      this.requesterQueue.push({
+        start: () =>
+          new Promise(resolve => {
+            requester.once("finished", () => resolve());
+            requester.start();
+          })
+      });
+    }
+
+    // ------------------------------------------------
+    // 6️⃣ Procesar la cola si estaba vacía
+    // ------------------------------------------------
+    if (!this.requesterOcupado) this.procesarCola();
   }
-
-  const whitelistIds = Object.keys(this.whitelist).filter(k => this.whitelist[k]);
-  if (whitelistIds.length === 0) {
-    console.log("⚠️ No hay items activos en la whitelist, nada que reiniciar.");
-    return;
-  }
-
-  // ------------------------------------------------
-  // 3️⃣ Obtener datos actualizados desde SkyBlock API
-  // ------------------------------------------------
-  let topItems = [];
-  try {
-    topItems = await this.skyblock.obtenerTop30NPCFlips();
-  } catch (err) {
-    console.error("Error obteniendo top NPC flips:", err);
-    return;
-  }
-
-  // ------------------------------------------------
-  // 4️⃣ Filtrar solo los que están en la whitelist
-  // ------------------------------------------------
-  const itemsAReiniciar = topItems.filter(item => whitelistIds.includes(item.id));
-
-  if (itemsAReiniciar.length === 0) {
-    console.log("⚠️ Ningún item del whitelist aparece en el top30. Abortando reinicio.");
-    return;
-  }
-
-  // ------------------------------------------------
-  // 5️⃣ Crear requesters para cada item filtrado
-  // ------------------------------------------------
-  for (const item of itemsAReiniciar) {
-    const idRandom = Math.floor(Math.random() * 1000000) + 1;
-    const nombre = item.nombre;
-    const cantidad = item.cantidadCon1M; // o la que quieras usar
-
-    console.log(`🎯 Reiniciando item: ${nombre} x${cantidad}`);
-
-    const requester = new ItemRequester(this.bot, idRandom, nombre, cantidad, tiempo, enMinutos);
-    requester.panel = this;
-    this.asignarListeners(requester);
-    this.io.emit('itemAdded', { id: idRandom, nombre, cantidad, tiempo });
-    this.requesterQueue.push({
-      start: () =>
-        new Promise(resolve => {
-          requester.once("finished", () => resolve());
-          requester.start();
-        })
-    });
-  }
-
-  // ------------------------------------------------
-  // 6️⃣ Procesar la cola si estaba vacía
-  // ------------------------------------------------
-  if (!this.requesterOcupado) this.procesarCola();
-}
-
-
-
-
-
-
-
-
 
   asignarListeners(requester) {
+
     requester.on('itemSearchFail', ({ id, nombre }) =>
       this.io.emit('stopItemSearch', { id, nombre })
     );
 
+
+    requester.on('itemBought', ({nombre}) => {
+            // Añadimos el nombre al final de la lista
+            this.ultimosComprados.push(nombre);
+
+            // Mantener máximo 3 elementos
+            if (this.ultimosComprados.length > 3) {
+                this.ultimosComprados.shift();
+            }
+
+            // Comprobar si el último nombre coincide con el anterior
+            if (this.ultimosComprados.length >= 2 &&
+                this.ultimosComprados[this.ultimosComprados.length - 1] === this.ultimosComprados[this.ultimosComprados.length - 2]) {
+                console.log("Se ha detectado una compra duplicada! Reseteando el programa si vuelve a suceder..");
+            }
+
+            // Comprobar si hay 3 compras consecutivas iguales
+            if (this.ultimosComprados.length === 3 &&
+                this.ultimosComprados[0] === this.ultimosComprados[1] &&
+                this.ultimosComprados[1] === this.ultimosComprados[2]) {
+                console.log(`Se ha comprado 3 objetos iguales con el nombre ${nombre}. Cerrando programa...`);
+                this.bot.emit('duplicateBoughtReset', {nombre});
+            }
+    });
+
     requester.on('itemSearchFound', ({ id, nombre }) => {
-      //console.log("ENVIANDO UN PAQUETE PARA CONTINUAR CON EL OBJETO DE LA TARJETA!!!! ID: ", id);
       this.io.emit('ContinueItemSearch', { id, nombre });
     });
 
@@ -585,8 +596,6 @@ async handleResetFinished(id) {
   
   }
 
-
-  
 }
 
 module.exports = Panel;
