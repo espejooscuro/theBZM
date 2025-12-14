@@ -114,6 +114,7 @@ class ChatListener {
 
   /**
    * 🧹 Limpia TODOS los listeners creados por este ChatListener
+   * y vacía los mensajes para liberar memoria
    */
   removeListeners() {
     if (!this.bot || !this._listeners) return
@@ -123,6 +124,7 @@ class ChatListener {
     }
 
     this._listeners = []
+    this.mensajes = [] // 🔹 limpiar historial para evitar acumulación de memoria
   }
 
   obtenerUltimos(n = 10) {

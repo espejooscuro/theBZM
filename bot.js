@@ -91,6 +91,7 @@ async function stopBot() {
   if (!bot) return;
 
   try {
+    // 🔹 Marcar estado como finalizado
     const estado = fs.existsSync(estadoPath)
       ? JSON.parse(fs.readFileSync(estadoPath))
       : {};
@@ -103,13 +104,18 @@ async function stopBot() {
   try {
     // 🔹 Limpiar listeners del ChatListener
     chat?.removeListeners?.();
-
-    // 🔹 Limpiar todos los listeners del bot
-    bot.removeAllListeners();
+    
+    // 🔹 Limpiar listeners del ScoreboardListener, InventoryListener y ContainerInteractor
+    scoreboard?.removeAll?.();
+    invListener?.removeAll?.();
+    interactor?.removeAll?.();
 
     // 🔹 Limpiar panel
     panel?.requesterQueue?.forEach(task => task.requester?.destroy?.());
     await panel?.destroy?.();
+
+    // 🔹 Limpiar listeners del bot
+    bot.removeAllListeners();
 
     // 🔹 Cerrar conexión del bot
     await bot.quit();
@@ -117,7 +123,7 @@ async function stopBot() {
     console.error('Error cerrando el bot:', e);
   }
 
-  // 🔹 Limpiar referencias
+  // 🔹 Limpiar referencias para liberar memoria
   bot = null;
   invListener = null;
   interactor = null;
@@ -127,6 +133,7 @@ async function stopBot() {
 
   console.log("Bot detenido completamente");
 }
+
 
 
 module.exports = { startBot, stopBot };
