@@ -25,7 +25,8 @@
       "node_modules/bytenode/**/*",
       "node_modules/windows-shortcuts/**/*",
       "node_modules/mineflayer/**/*",
-      "node_modules/yggdrasil/**/*"
+      "node_modules/yggdrasil/**/*",
+      "node_modules/iconv-lite/helpers/**/*.js"
     ],
     "scripts": [
       "bot.js",
