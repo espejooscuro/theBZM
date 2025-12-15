@@ -21,8 +21,8 @@ class ItemRequester extends EventEmitter {
     this.timers = {};
     this.filledDisparado = false;
     this.enPanico = false;
-    this.minDelay = 200;
-    this.maxDelay = 400;
+    this.minDelay = 150;
+    this.maxDelay = 200;
     this.finishedCollecting = false;
     this.chat = new ChatListener(bot, {
       palabras: ['Connecting to', 'MiniEspe'],
@@ -226,7 +226,7 @@ class ItemRequester extends EventEmitter {
       intentos++;
       //console.log(`🔹 Slot ${slot}: Intento ${intentos} de click`);
       await this.container.click({ contiene: name, tipo: 'contenedor' });
-      await this.esperar(250);
+      //await this.esperar(250);
       await this.checkPanic();
 
       const ventana = this.containerListener.nombreContenedorAbierto();
@@ -241,7 +241,7 @@ class ItemRequester extends EventEmitter {
 
                 if (this.containerListener.inventarioMayormenteLleno()) {
             //console.log(`⚠️ [LOG] Inventario parece mayormente lleno. Comprobando de nuevo en 1 segundo para continuar...`);
-            await this.esperar(700);
+            await this.esperar(250);
             if (this.containerListener.inventarioMayormenteLleno()) {
               //console.log(`⚠️ [LOG] Comprobación exitosa, Procediendo a vender los objetos...`);
             }
@@ -371,7 +371,7 @@ class ItemRequester extends EventEmitter {
     const regexSetup = new RegExp(`Buy Order Setup!.*${nombre}`, 'i');
     const regexComplete = new RegExp(`your buy order.*${nombre}.*was filled!`, 'i');
 
-    this.chat.onMensajeContiene(
+    this.chat.onceMensajeContiene(
       /(You have 60 seconds to warp out!|You can't use this when the server is about to restart|Sending packets too fast!|A kick occurred)/i,
       () => {
         //console.log("⚠️ PANIC TRIGGER DETECTADO");
@@ -379,7 +379,7 @@ class ItemRequester extends EventEmitter {
       }
     );
 
-    this.chat.onMensajeContiene(regexSetup, (msg) => {
+    this.chat.onceMensajeContiene(regexSetup, (msg) => {
       const match = msg.mensaje.match(/for\s*([\d,.]+)\s*coins/i);
       if (match && match[1]) {
         this.precioTotal = match[1];
@@ -391,7 +391,7 @@ class ItemRequester extends EventEmitter {
 
     });
 
-    this.chat.onMensajeContiene(/was filled/i, (msg) => {
+    this.chat.onceMensajeContiene(/was filled/i, (msg) => {
       // Solo nos interesa emitir esto si este requester es el "restart"
       if (this.customName && this.customName.toLowerCase() === 'restart') {
         //console.log('🧹 [RESTART] Mensaje "was filled" detectado — emitiendo cleanFilled');
@@ -407,7 +407,7 @@ class ItemRequester extends EventEmitter {
     })
 
 
-    this.chat.onMensajeContiene(regexComplete, async () => {
+    this.chat.onceMensajeContiene(regexComplete, async () => {
       const precioTotalNPC = await this.skyBlock.calcularPrecioTotal(this.customName, this.cantidad);
       const precioNum = Number(String(precioTotalNPC).replace(/,/g, '').replace(/coins/gi, '').trim());
       const precioSetupNum = Number(String(this.precioTotal || 0).replace(/,/g, '').trim());
@@ -488,7 +488,7 @@ while (!this.finishedCollecting) {
           //console.log(`🔹 [LOG] Intento ${intentos}: Click en "${buyOrderName}"`);
 
            await this.container.click({ nombreCustom: buyOrderName, tipo: 'contenedor' });
-          await this.esperar(250);
+          //await this.esperar(250);
           await this.checkPanic();
 
           if (this.containerListener.nombreContenedorAbierto() === "order options") {

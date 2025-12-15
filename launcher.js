@@ -63,6 +63,8 @@ async function startBot() {
 
 async function stopBot() {
   if (!botInstance) return;
+
+  botInstance.removeAllListeners();
   await botModule.stopBot();
   botInstance = null;
   console.log("Bot detenido completamente.");
@@ -88,15 +90,14 @@ function programarReinicios() {
   console.log("Reinicio corto en", shortInterval / 1000, "segundos (modo " + (isTest ? "TEST" : "PROD") + ")");
   console.log("Reinicio largo en", longInterval / 1000, "segundos (modo " + (isTest ? "TEST" : "PROD") + ")");
 
-  shortTimer = setTimeout(async () => {
-    console.log("Reinicio horario");
-    await startBot();
-  }, shortInterval);
+  shortTimer = setTimeout(() => {
+  if (!isRestarting) startBot();
+}, shortInterval);
 
-  longTimer = setTimeout(async () => {
-    console.log("Reinicio largo");
-    await startBot();
-  }, longInterval);
+longTimer = setTimeout(() => {
+  if (!isRestarting) startBot();
+}, longInterval);
+
 }
 
 /* ---------- signals ---------- */

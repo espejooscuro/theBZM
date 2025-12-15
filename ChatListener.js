@@ -167,6 +167,35 @@ class ChatListener {
     this._listeners.push({ event: 'chat', handler: handlerChat })
     this._listeners.push({ event: 'message', handler: handlerMessage })
   }
+
+
+  onceMensajeContiene(texto, callback) {
+  if (!texto || typeof callback !== 'function') return
+
+  const handlerChat = (username, mensaje) => {
+    const mensajeLower = mensaje.toLowerCase()
+    const patron = typeof texto === 'string' ? texto.toLowerCase() : texto
+    if ((typeof patron === 'string' && mensajeLower.includes(patron)) ||
+        (patron instanceof RegExp && patron.test(mensaje))) {
+      callback({ tipo: 'chat', usuario: username, mensaje })
+      this.bot.off('chat', handlerChat) // se auto-remueve
+    }
+  }
+
+  const handlerMessage = (jsonMsg) => {
+    const textoPlano = jsonMsg.toString().trim()
+    const patron = typeof texto === 'string' ? texto.toLowerCase() : texto
+    if ((typeof patron === 'string' && textoPlano.toLowerCase().includes(patron)) ||
+        (patron instanceof RegExp && patron.test(textoPlano))) {
+      callback({ tipo: 'sistema', mensaje: textoPlano })
+      this.bot.off('message', handlerMessage) // se auto-remueve
+    }
+  }
+
+  this.bot.on('chat', handlerChat)
+  this.bot.on('message', handlerMessage)
+}
+
 }
 
 module.exports = ChatListener

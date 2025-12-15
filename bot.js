@@ -30,11 +30,13 @@ async function startBot() {
       host: 'mc.hypixel.net',
       port: 25565,
       auth: 'microsoft',
-      version: '1.8.9'
+      version: '1.8.9',
+      keepAlive: true,
+      timeout: 60000
     });
 
-    bot.on('error', err => reject(err));
-    bot.on('end', () => console.log('Bot desconectado'));
+    bot.once('error', err => reject(err));
+    bot.once('end', () => console.log('Bot desconectado'));
 
     invListener = new InventoryListener(bot);
     interactor = new ContainerInteractor(bot, 150, 350);
@@ -46,7 +48,7 @@ async function startBot() {
     });
 
     // Emitir evento crítico
-    chat.onMensajeContiene(
+    chat.onceMensajeContiene(
       /You have 60 seconds to warp out|You can't use this when the server is about to restart|Sending packets too fast|kick occurred in your connection, so you were put in the SkyBlock lobby|were spawned in Limbo/i,
       (registro) => {
         console.log('⚠️ Mensaje crítico detectado, solicitando reinicio del bot:', registro.mensaje);
@@ -54,8 +56,8 @@ async function startBot() {
       }
     );
 
-
-    bot.on('duplicateBoughtReset', ({ nombre }) => {
+    
+    bot.once('duplicateBoughtReset', ({ nombre }) => {
         console.log(`Cerrando programa... se detectaron 3 compras de: ${nombre}`);
         bot.emit('DupeReset');
     });
@@ -118,6 +120,8 @@ async function stopBot() {
     bot.removeAllListeners();
 
     // 🔹 Cerrar conexión del bot
+    bot.removeAllListeners();
+    bot._client?.removeAllListeners?.();
     await bot.quit();
   } catch (e) {
     console.error('Error cerrando el bot:', e);
@@ -137,3 +141,5 @@ async function stopBot() {
 
 
 module.exports = { startBot, stopBot };
+
+//undergoing maintenance

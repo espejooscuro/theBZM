@@ -69,7 +69,7 @@
 const InventoryListener = require('./InventoryListener')
 
 class ContainerInteractor {
-  constructor(bot, minDelay = 700, maxDelay = 1500) {
+  constructor(bot, minDelay = 300, maxDelay = 700) {
     this.bot = bot
     this.minDelay = minDelay
     this.maxDelay = maxDelay
@@ -90,42 +90,60 @@ class ContainerInteractor {
   }
 
   async click(filtros = {}, mouseButton = 0, mode = 0) {
-    const delay = 400 + Math.floor(Math.random() * 200)
-    await new Promise(res => setTimeout(res, delay))
+  const tiempoInicioTotal = Date.now()  // 🔹 Inicio del tiempo total
 
-    const items = this.cachedItems || JSON.parse(this.invListener.obtenerInventarioPlain())
-    const itemEncontrado = items.find(item => {
-      if (filtros.contiene) {
-        const needle = filtros.contiene.toLowerCase()
-        if (!(item.nombreOriginal?.toLowerCase().includes(needle) ||
-              item.nombreCustom?.toLowerCase().includes(needle))) return false
-      }
-      for (const key in filtros) {
-        if (key === 'contiene') continue
-        const valorItem = typeof item[key] === 'string' ? item[key].toLowerCase() : item[key]
-        const valorFiltro = typeof filtros[key] === 'string' ? filtros[key].toLowerCase() : filtros[key]
-        if (valorItem !== valorFiltro) return false
-      }
-      return true
-    })
+  const delay = 100 + Math.floor(Math.random() * 200)
+  await new Promise(res => setTimeout(res, delay))
 
-    if (!itemEncontrado) return false
+  // 🔹 Medición de tiempo de obtener inventario
+  const tiempoInicioInventario = Date.now()
+  const items = this.cachedItems || JSON.parse(this.invListener.obtenerInventarioPlain())
+  const tiempoFinInventario = Date.now()
+  //console.log(`⏱ Tiempo en leer inventario: ${tiempoFinInventario - tiempoInicioInventario} ms`)
 
-    let slotReal = itemEncontrado.slot
-    if (itemEncontrado.tipo === 'inventario' && slotReal <= 8) slotReal += 36
-
-    try {
-      this.bot.currentWindow.requiresConfirmation = false
-      this.bot.inventory.requiresConfirmation = false
-      await this.bot.clickWindow(slotReal, mouseButton, mode)
-      // Solo confirmación de click
-      console.log(`✅ Click ejecutado en slot ${slotReal}`)
-      return true
-    } catch (err) {
-      console.error("⚠️ Error en clickWindow:", err.message)
-      return false
+  const itemEncontrado = items.find(item => {
+    if (filtros.contiene) {
+      const needle = filtros.contiene.toLowerCase()
+      if (!(item.nombreOriginal?.toLowerCase().includes(needle) ||
+            item.nombreCustom?.toLowerCase().includes(needle))) return false
     }
+    for (const key in filtros) {
+      if (key === 'contiene') continue
+      const valorItem = typeof item[key] === 'string' ? item[key].toLowerCase() : item[key]
+      const valorFiltro = typeof filtros[key] === 'string' ? filtros[key].toLowerCase() : filtros[key]
+      if (valorItem !== valorFiltro) return false
+    }
+    return true
+  })
+
+  if (!itemEncontrado) {
+    console.log(`❌ Click abortado: no se encontró el item.`)
+    return false
   }
+
+  let slotReal = itemEncontrado.slot
+  if (itemEncontrado.tipo === 'inventario' && slotReal <= 8) slotReal += 36
+
+  try {
+    this.bot.currentWindow.requiresConfirmation = false
+    this.bot.inventory.requiresConfirmation = false
+
+    const tiempoInicioClick = Date.now()
+    await this.bot.clickWindow(slotReal, mouseButton, mode)
+    const tiempoFinClick = Date.now()
+
+    //console.log(`✅ Click ejecutado en slot ${slotReal} en ${tiempoFinClick - tiempoInicioClick} ms`)
+    const tiempoTotal = Date.now() - tiempoInicioTotal
+    //console.log(`⏱ Tiempo total del click (incluyendo lectura de inventario y delay): ${tiempoTotal} ms`)
+
+    return true
+  } catch (err) {
+    console.error("⚠️ Error en clickWindow:", err.message)
+    return false
+  }
+}
+
+
 
   async shiftClick(filtros) {
     await this.click(filtros, 0, 1)

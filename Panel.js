@@ -102,6 +102,8 @@ class Panel {
     this.setupSockets();
   }
 
+
+
   obtenerInventario() {
     return JSON.parse(this.invListener.obtenerInventario());
   }
