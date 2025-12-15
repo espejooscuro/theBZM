@@ -13,6 +13,7 @@
   "dependencies": {
     "bytenode": "^1.5.7",
     "express": "^5.1.0",
+    "iconv-lite": "^0.7.1",
     "mineflayer": "^4.33.0",
     "node-fetch": "^2.7.0",
     "socket.io": "^4.8.1",
@@ -26,7 +27,7 @@
       "node_modules/windows-shortcuts/**/*",
       "node_modules/mineflayer/**/*",
       "node_modules/yggdrasil/**/*",
-      "node_modules/iconv-lite/helpers/**/*.js"
+      "node_modules/raw-body/node_modules/iconv-lite/lib/helpers/**/*.js"
     ],
     "scripts": [
       "bot.js",
