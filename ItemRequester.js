@@ -21,8 +21,8 @@ class ItemRequester extends EventEmitter {
     this.timers = {};
     this.filledDisparado = false;
     this.enPanico = false;
-    this.minDelay = 150;
-    this.maxDelay = 200;
+    this.minDelay = 200;
+    this.maxDelay = 400;
     this.finishedCollecting = false;
     this.chat = new ChatListener(bot, {
       palabras: ['Connecting to', 'MiniEspe'],

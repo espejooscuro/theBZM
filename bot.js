@@ -32,11 +32,18 @@ async function startBot() {
       auth: 'microsoft',
       version: '1.8.9',
       keepAlive: true,
-      timeout: 60000
+      timeout: 60000,
+      connectTimeout: 120000
     });
 
-    bot.once('error', err => reject(err));
-    bot.once('end', () => console.log('Bot desconectado'));
+    bot.on('error', err => {
+      console.log('❌ Error de red:', err.message)
+    })
+
+    bot.on('end', reason => {
+      console.log('🔌 Conexión cerrada:', reason)
+
+    })
 
     invListener = new InventoryListener(bot);
     interactor = new ContainerInteractor(bot, 150, 350);
