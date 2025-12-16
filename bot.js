@@ -36,10 +36,14 @@ async function startBot() {
       connectTimeout: 120000
     });
 
-    bot.on('error', err => {
+    bot._client.on('error', err => {
       console.log('❌ Error de red:', err.message)
       bot.emit('errorReset');
     })
+
+    process.on('uncaughtException', err => {
+    console.log('⚠ Excepción no capturada, ignorada:', err.message)
+    });
 
     bot.on('end', reason => {
       console.log('🔌 Conexión cerrada:', reason)
