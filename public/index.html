@@ -601,12 +601,13 @@ input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); 
 // ================= WHITE-LIST GLOBAL (del servidor) =================
 let whitelist = {};
 
-// El servidor envía el whitelist al conectar
+// El servidor envía la whitelist al conectar
 socket.on("whitelistData", (data) => {
   whitelist = data || {};
   console.log("✅ Whitelist recibida del servidor:", whitelist);
   cargarNPCFlips(); // ✅ Solo ahora cargamos la tabla
 });
+
 
 
 // ================= DOM ELEMENTOS =================
@@ -632,7 +633,7 @@ socket.on('npcFlipsData', (data) => {
 
     const valores = [
       item.nombre,
-      item.id,
+      item.id,           // todavía lo mostramos
       item.buyPrice,
       item.npcPrice,
       item.profit,
@@ -644,7 +645,7 @@ socket.on('npcFlipsData', (data) => {
       item.needEnchanted ?? '',
     ];
 
-    // Celdas normales
+    // Crear celdas normales
     valores.forEach((val, i) => {
       const td = document.createElement('td');
       td.textContent = val;
@@ -660,16 +661,17 @@ socket.on('npcFlipsData', (data) => {
     const btn = document.createElement('button');
 
     btn.className = 'btnWhitelist';
-    btn.textContent = whitelist[item.id] ? '✔' : 'WL';
+    // Cambiado a nombre
+    btn.textContent = whitelist[item.nombre] ? '✔' : 'WL';
 
     btn.addEventListener('click', () => {
-      // Alternar estado en el whitelist local
-      whitelist[item.id] = !whitelist[item.id];
+      // Alternar estado en whitelist local usando nombre
+      whitelist[item.nombre] = !whitelist[item.nombre];
 
       // Guardar whitelist en el servidor
       socket.emit("actualizarWhitelist", whitelist);
 
-      // Recargar tabla sin interferir
+      // Recargar tabla
       cargarNPCFlips();
     });
 
@@ -679,6 +681,7 @@ socket.on('npcFlipsData', (data) => {
     tablaNPCFlips.appendChild(fila);
   });
 });
+
 
 
 
@@ -736,12 +739,11 @@ btnComenzarFlips?.addEventListener('click', () => {
   const enMinutos = (document.getElementById('itemUnidad')?.value === 'minutos');
   if (enMinutos) tiempo *= 60;
 
-  for (const itemId in whitelist) {
-    if (whitelist[itemId]) {
+  for (const nombre in whitelist) {
+    if (whitelist[nombre]) {
       const fila = Array.from(tablaNPCFlips.querySelectorAll('tr'))
-                        .find(r => r.cells[1]?.textContent === itemId);
+                        .find(r => r.cells[0]?.textContent === nombre); // buscar por nombre
       if (!fila) continue;
-      const nombre = fila.cells[0].textContent;
       const cantidad = parseInt(fila.cells[5].textContent) || 1;
       const idRandom = Math.floor(Math.random() * 1000000) + 1;
 
@@ -751,24 +753,25 @@ btnComenzarFlips?.addEventListener('click', () => {
 });
 
 
+
 socket.on('resetFinished', (id) => {
   let tiempo = parseInt(document.getElementById('itemTiempo')?.value.trim() || '300');
   const enMinutos = (document.getElementById('itemUnidad')?.value === 'minutos');
   if (enMinutos) tiempo *= 60;
 
-  for (const itemId in whitelist) {
-    if (whitelist[itemId]) {
+  for (const nombre in whitelist) {
+    if (whitelist[nombre]) {
       const fila = Array.from(tablaNPCFlips.querySelectorAll('tr'))
-                        .find(r => r.cells[1]?.textContent === itemId);
+                        .find(r => r.cells[0]?.textContent === nombre); // buscar por nombre
       if (!fila) continue;
-      const nombre = fila.cells[0].textContent;
       const cantidad = parseInt(fila.cells[5].textContent) || 1;
       const idRandom = Math.floor(Math.random() * 1000000) + 1;
 
-      //socket.emit('solicitarItem', { id: idRandom, nombre, cantidad, tiempo, enMinutos });
+      // socket.emit('solicitarItem', { id: idRandom, nombre, cantidad, tiempo, enMinutos });
     }
   }
 });
+
 
 
 

@@ -21,14 +21,14 @@ class Panel {
     this.requesterQueue = [];
     this.requesterOcupado = false;
     this.filledProcesados = new Set();
-    this.ultimoCantidad = {}; // { nombreItem: cantidad } 
+    this.ultimoCantidad = {}; 
     this.ultimoTiempo = {};  
     this.ultimosComprados = [];
 
     this.chat = new ChatListener(bot, {
-      excluirPalabras: ['APPEARING OFFLINE', '✎ Mana'],
-      tipos: ['chat', 'sistema'],
-      callback: msg => this.io?.emit('chatMensaje', msg),
+        excluirPalabras: ['APPEARING OFFLINE', '✎ Mana'],
+        tipos: ['chat', 'sistema'],
+        callback: msg => this.io?.emit('chatMensaje', msg),
     });
 
     // JSON para guardar si la web ya se abrió
@@ -37,11 +37,11 @@ class Panel {
     // Leer si la web ya estaba abierta
     let webYaAbierta = false;
     try {
-      const data = fs.readFileSync(this.estadoPath, "utf8");
-      const estado = JSON.parse(data);
-      webYaAbierta = estado.webAbierta;
+        const data = fs.readFileSync(this.estadoPath, "utf8");
+        const estado = JSON.parse(data);
+        webYaAbierta = estado.webAbierta;
     } catch (err) {
-      console.log("No se pudo leer estado.json, se asume web no abierta.");
+        console.log("No se pudo leer estado.json, se asume web no abierta.");
     }
 
     this.app = express();
@@ -52,55 +52,63 @@ class Panel {
     this.viewerInstance = null;
 
     this.bot._client.on('packet', packet => {
-      if (packet.prefix?.includes('Purse:')) {
-        const combined = (packet.prefix || '') + (packet.suffix || '');
-        const cleanText = combined.replace(/§[0-9a-fk-or]/gi, '').trim();
-        const match = cleanText.match(/Purse:\s*([\d,]+)/);
-        if (match?.[1]) {
-          this.currentPurse = match[1];
-          this.io.emit('purseUpdate', { value: this.currentPurse });
+        if (packet.prefix?.includes('Purse:')) {
+            const combined = (packet.prefix || '') + (packet.suffix || '');
+            const cleanText = combined.replace(/§[0-9a-fk-or]/gi, '').trim();
+            const match = cleanText.match(/Purse:\s*([\d,]+)/);
+            if (match?.[1]) {
+                this.currentPurse = match[1];
+                this.io.emit('purseUpdate', { value: this.currentPurse });
+            }
         }
-      }
     });
 
     this.app.use(express.static(path.join(__dirname, 'public')));
     this.app.get('/viewer-port', (req, res) => res.json({ port: this.viewerPort }));
 
     this.server.listen(port, () => {
-      console.log(`🌐 Panel web en http://localhost:${port}`);
-      const url = `http://localhost:${port}`;
+        console.log(`🌐 Panel web en http://localhost:${port}`);
+        const url = `http://localhost:${port}`;
 
-      // Abrir web solo si no estaba abierta
-      if (!webYaAbierta) {
-        if (process.platform === 'win32') exec(`start ${url}`);
-        else if (process.platform === 'darwin') exec(`open ${url}`);
-        else exec(`xdg-open ${url}`);
+        // Abrir web solo si no estaba abierta
+        if (!webYaAbierta) {
+            if (process.platform === 'win32') exec(`start ${url}`);
+            else if (process.platform === 'darwin') exec(`open ${url}`);
+            else exec(`xdg-open ${url}`);
 
-        // Guardar que la web ya se abrió
-        fs.writeFileSync(this.estadoPath, JSON.stringify({ webAbierta: true }, null, 2));
-      }
+            // Guardar que la web ya se abrió
+            fs.writeFileSync(this.estadoPath, JSON.stringify({ webAbierta: true }, null, 2));
+        }
     });
 
+      // ======================== WHITELIST GLOBAL ========================
+      const isPkg = typeof process.pkg !== "undefined";
+      const basePath = isPkg ? path.dirname(process.execPath) : __dirname;
 
-    // ======================== WHITELIST GLOBAL ========================
-    this.whitelistPath = path.join(__dirname, "whitelist.json");
-    this.whitelist = {};
-
-    // Cargar whitelist desde archivo
-    try {
-      const data = fs.readFileSync(this.whitelistPath, "utf8");
-      this.whitelist = JSON.parse(data);
-      console.log("📄 Whitelist cargado:", this.whitelist);
-    } catch (err) {
-      console.log("⚠️ No existe whitelist.json, creando uno nuevo...");
-      fs.writeFileSync(this.whitelistPath, "{}");
+      this.whitelistPath = path.join(basePath, "whitelist.json");
       this.whitelist = {};
-    }
+
+      // Crear whitelist si no existe
+      if (!fs.existsSync(this.whitelistPath)) {
+          fs.writeFileSync(this.whitelistPath, JSON.stringify({}, null, 2));
+          console.log("📄 whitelist.json creado en:", this.whitelistPath);
+      }
+
+      // Cargar whitelist
+      try {
+          const data = fs.readFileSync(this.whitelistPath, "utf8");
+          this.whitelist = JSON.parse(data);
+          console.log("📄 Whitelist cargado:", this.whitelist);
+      } catch (err) {
+          console.error("⚠️ Error leyendo whitelist.json, usando whitelist vacía");
+          this.whitelist = {};
+      }
+
+      this.setupSockets();
 
 
+}
 
-    this.setupSockets();
-  }
 
 
 
@@ -219,49 +227,38 @@ class Panel {
   async handleResetFinished(id) {
     console.log(`♻️ [PANEL] resetFinished recibido de ID ${id}`);
 
-    // ------------------------------------------------
-    // 1️⃣ Obtener datos por defecto del reset
-    // ------------------------------------------------
+    // 1️⃣ Datos por defecto
     let tiempo = this.defaultResetTime ?? 300; 
     let enMinutos = this.defaultUnidadMinutos ?? false;
-
     if (enMinutos) tiempo *= 60;
 
-    // ------------------------------------------------
     // 2️⃣ Leer whitelist actual
-    // ------------------------------------------------
     if (!this.whitelist) {
-      console.warn("⚠️ No hay whitelist configurada en el panel.");
-      return;
+        console.warn("⚠️ No hay whitelist configurada en el panel.");
+        return;
     }
 
-    const whitelistIds = Object.keys(this.whitelist).filter(k => this.whitelist[k]);
-    if (whitelistIds.length === 0) {
-      console.log("⚠️ No hay items activos en la whitelist, nada que reiniciar.");
-      return;
+    const whitelistNombres = Object.keys(this.whitelist).filter(k => this.whitelist[k]);
+    if (whitelistNombres.length === 0) {
+        console.log("⚠️ No hay items activos en la whitelist, nada que reiniciar.");
+        return;
     }
 
-    // ------------------------------------------------
-    // 3️⃣ Obtener datos actualizados desde SkyBlock API
-    // ------------------------------------------------
+    // 3️⃣ Obtener top items desde API
     let topItems = [];
     try {
-      topItems = await this.skyblock.obtenerTop30NPCFlips();
+        topItems = await this.skyblock.obtenerTop30NPCFlips();
     } catch (err) {
-      console.error("Error obteniendo top NPC flips:", err);
-      return;
+        console.error("Error obteniendo top NPC flips:", err);
+        return;
     }
 
-    // ------------------------------------------------
-    // 4️⃣ Filtrar solo los que están en la whitelist
-    // ------------------------------------------------
-    const itemsAReiniciar = topItems.filter(item => whitelistIds.includes(item.id));
-
+    // 4️⃣ Filtrar solo los que están en la whitelist por nombre
+    const itemsAReiniciar = topItems.filter(item => whitelistNombres.includes(item.nombre));
     if (itemsAReiniciar.length === 0) {
-      console.log("⚠️ Ningún item del whitelist aparece en el top30. Abortando reinicio.");
-      return;
+        console.log("⚠️ Ningún item del whitelist aparece en el top30. Abortando reinicio.");
+        return;
     }
-
     // ------------------------------------------------
     // 5️⃣ Crear requesters para cada item filtrado
     // ------------------------------------------------
@@ -429,41 +426,33 @@ class Panel {
 
   setupSockets() {
     this.io.on('connection', socket => {
-      console.log('🖥️ Cliente conectado al panel web');
-      const whitelistPath = path.join(__dirname, "whitelist.json");
-      let whitelistData = {};
-      try {
-        
-        const data = fs.readFileSync(whitelistPath, "utf8");
-        whitelistData = JSON.parse(data);
-      } catch (err) {
-        console.warn("No se pudo leer whitelist.json, usando whitelist vacía");
-      }
+    console.log('🖥️ Cliente conectado al panel web');
 
-      // 🔹 Enviar whitelist al cliente
-      socket.emit("whitelistData", whitelistData);
+    // Enviar whitelist al cliente
+    socket.emit("whitelistData", this.whitelist);
 
-
-
-      socket.on('solicitarNPCFlips', async () => {
-        console.log('Cliente pidió datos de NPC Flips');
-        try {
-          // Usar la instancia de SkyBlockItem
-          const resultados = await this.skyblock.obtenerTop30NPCFlips();
-          socket.emit('npcFlipsData', resultados);
-        } catch (err) {
-          console.error('Error al calcular NPC Flips:', err);
-          socket.emit('npcFlipsData', []); // enviar array vacío en caso de error
-        }
-      });
-
-      socket.on("actualizarWhitelist", (newWL) => {
-        fs.writeFileSync("whitelist.json", JSON.stringify(newWL, null, 2));
+    // Actualización desde web
+    socket.on("actualizarWhitelist", (newWL) => {
+        this.whitelist = newWL;
+        fs.writeFileSync(this.whitelistPath, JSON.stringify(newWL, null, 2));
         console.log("Whitelist actualizado:", newWL);
 
-        // Enviar el whitelist actualizado a TODOS los clientes
         this.io.emit("whitelistData", newWL);
-      });
+    });
+
+
+    socket.on('solicitarNPCFlips', async () => {
+      console.log('Cliente pidió datos de NPC Flips');
+      try {
+        const resultados = await this.skyblock.obtenerTop30NPCFlips();
+        socket.emit('npcFlipsData', resultados);
+      } catch (err) {
+        console.error('Error al calcular NPC Flips:', err);
+        socket.emit('npcFlipsData', []); // enviar array vacío en caso de error
+      }
+    });
+
+
 
 
             // 🔄 RESTART DEL SISTEMA DE REQUESTERS
