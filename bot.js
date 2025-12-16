@@ -36,7 +36,7 @@ async function startBot() {
       connectTimeout: 120000
     });
 
-    bot._client.on('error', err => {
+    bot.on('error', err => {
       console.log('❌ Error de red:', err.message)
       bot.emit('errorReset');
     })
