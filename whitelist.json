@@ -7,5 +7,6 @@
   "MANGROVE_LOG": true,
   "FIG_LOG": true,
   "WHEAT": true,
-  "PRISMARINE_SHARD": true
+  "PRISMARINE_SHARD": true,
+  "SAND:1": true
 }

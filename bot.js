@@ -38,6 +38,7 @@ async function startBot() {
 
     bot.on('error', err => {
       console.log('❌ Error de red:', err.message)
+      bot.emit('errorReset');
     })
 
     bot.on('end', reason => {

@@ -48,12 +48,18 @@ async function startBot() {
   console.log("Iniciando bot…");
   botInstance = await botModule.startBot();
 
-  botInstance.once("mensajeCritico", async () => {
+  botInstance.on("mensajeCritico", async () => {
     console.log("Evento crítico → reinicio bot");
     await startBot(); // reinicia solo el bot
   });
 
-  botInstance.once("DupeReset", async () => {
+  botInstance.on("errorReset", async () => {
+    console.log("Error detectado en bot.js → reinicio bot");
+    await delay(10000);
+    await startBot(); // reinicia solo el bot
+  });
+
+  botInstance.on("DupeReset", async () => {
     console.log("DupeReset → reinicio bot");
     await startBot(); // reinicia solo el bot
   });
