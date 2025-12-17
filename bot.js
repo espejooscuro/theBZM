@@ -56,7 +56,7 @@ async function startBot() {
     chat = new ChatListener(bot, {
       palabras: ['Connecting to', 'MiniEspe'],
       tipos: ['sistema'],
-      excluirPalabras: ['APPEARING OFFLINE', '✎ Mana']
+      excluirPalabras: ['APPEARING OFFLINE', '✎']
     });
 
     // Emitir evento crítico

@@ -25,6 +25,7 @@ class ItemRequester extends EventEmitter {
     this.maxDelay = 400;
     this.finishedCollecting = false;
     this.chat = new ChatListener(bot, {
+      excluirPalabras: ['APPEARING OFFLINE', '✎'],
       palabras: ['Connecting to', 'MiniEspe'],
       tipos: ['sistema']
     });

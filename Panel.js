@@ -26,7 +26,7 @@ class Panel {
     this.ultimosComprados = [];
 
     this.chat = new ChatListener(bot, {
-        excluirPalabras: ['APPEARING OFFLINE', '✎ Mana'],
+        excluirPalabras: ['APPEARING OFFLINE', '✎'],
         tipos: ['chat', 'sistema'],
         callback: msg => this.io?.emit('chatMensaje', msg),
     });
