@@ -147,7 +147,6 @@ async function stopBot() {
   chat = null;
   panel = null;
 
-  console.log("Bot detenido completamente");
 }
 
 

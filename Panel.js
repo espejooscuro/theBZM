@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const { exec } = require('child_process');
 const fs = require('fs');
+const EventEmitter = require('events');
 
 const InventoryListener = require('./InventoryListener');
 const ContainerInteractor = require('./ContainerInteractor');
@@ -11,8 +12,9 @@ const ChatListener = require('./ChatListener');
 const ItemRequester = require('./ItemRequester');
 const SkyBlockItem = require('./SkyBlockItem');
 
-class Panel {
+class Panel extends EventEmitter{
   constructor(bot, port = 3000) {
+    super();
     this.bot = bot;
     this.invListener = new InventoryListener(bot);
     this.container = new ContainerInteractor(bot);
@@ -24,11 +26,13 @@ class Panel {
     this.ultimoCantidad = {}; 
     this.ultimoTiempo = {};  
     this.ultimosComprados = [];
-
     this.chat = new ChatListener(bot, {
         excluirPalabras: ['APPEARING OFFLINE', '✎'],
         tipos: ['chat', 'sistema'],
-        callback: msg => this.io?.emit('chatMensaje', msg),
+        callback: msg => {
+          this.io?.emit('chatMensaje', msg);
+          this.emit('CHAT_MESSAGE', msg);
+        },
     });
 
     // JSON para guardar si la web ya se abrió
@@ -149,11 +153,12 @@ class Panel {
     ]);
   }
 
+  this.emit('STOP_ALL_REQUESTERS');
   // Limpiar timers internos
   if (this._checkStopInterval) clearInterval(this._checkStopInterval);
   if (this._timers) Object.values(this._timers).forEach(t => clearTimeout(t));
 
-  console.log("✅ Panel destruido correctamente");
+  console.log("🛑 Panel destruido correctamente");
 }
 
   //Reset manual usado al principio de la ejecucón para comenzar el reset y todos los itemRequesters
@@ -188,6 +193,8 @@ class Panel {
     enMinutos
   );
   nuevoRequester.panel = this;
+  nuevoRequester.bindPanel(this);
+  nuevoRequester.detectarMensajes();
   this.asignarListeners(nuevoRequester);
 
   this.io.emit("itemAdded", { id: nuevoId, nombre, cantidad, tiempo });
@@ -263,7 +270,7 @@ class Panel {
     // 5️⃣ Crear requesters para cada item filtrado
     // ------------------------------------------------
     for (const item of itemsAReiniciar) {
-      const idRandom = Math.floor(Math.random() * 1000000) + 1;
+      const idRandom = Math.floor(Math.random() * 9999999) + 1;
       const nombre = item.nombre;
       const cantidad = item.cantidadCon1M; // o la que quieras usar
 
@@ -271,6 +278,8 @@ class Panel {
 
       const requester = new ItemRequester(this.bot, idRandom, nombre, cantidad, tiempo, enMinutos);
       requester.panel = this;
+      requester.bindPanel(this);
+      requester.detectarMensajes();
       this.asignarListeners(requester);
       this.io.emit('itemAdded', { id: idRandom, nombre, cantidad, tiempo });
       this.requesterQueue.push({
@@ -317,6 +326,10 @@ class Panel {
                 console.log(`Se ha comprado 3 objetos iguales con el nombre ${nombre}. Cerrando programa...`);
                 this.bot.emit('duplicateBoughtReset', {nombre});
             }
+    });
+
+    requester.on('sendCMD', ({cmd}) => {
+      this.chat.enviar(cmd);
     });
 
     requester.on('itemSearchFound', ({ id, nombre }) => {
@@ -400,12 +413,14 @@ class Panel {
           this.filledProcesados.delete(id);
 
           // Reemitir itemAdded
-          const nuevoId = Math.floor(Math.random() * 1000000) + 1;
+          const nuevoId = Math.floor(Math.random() * 9999999) + 1;
           this.io.emit('itemAdded', { id: nuevoId, nombre, cantidad, tiempo });
 
           // Crear nuevo requester y asignarle todos los listeners
           const nuevoRequester = new ItemRequester(this.bot, nuevoId, nombre, cantidad, tiempo, enMinutos);
           nuevoRequester.panel = this;
+          nuevoRequester.bindPanel(this);
+          nuevoRequester.detectarMensajes();
           this.asignarListeners(nuevoRequester);
 
           this.requesterQueue.push({
@@ -495,6 +510,8 @@ class Panel {
         enMinutos
       );
       nuevoRequester.panel = this;
+      nuevoRequester.bindPanel(this);
+      nuevoRequester.detectarMensajes();
       this.asignarListeners(nuevoRequester);
       
       this.io.emit('itemAdded', { id: nuevoId, nombre, cantidad, tiempo });
@@ -555,6 +572,8 @@ class Panel {
         // Crear requester inicial y asignarle listeners
         const requester = new ItemRequester(this.bot, id, nombre, cantidad, tiempo, enMinutos);
         requester.panel = this;
+        requester.bindPanel(this);
+        nuevoRequester.detectarMensajes();
         this.asignarListeners(requester);
 
         this.requesterQueue.push({

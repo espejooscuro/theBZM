@@ -343,7 +343,7 @@ btnSolicitarItem.onclick = () => {
   }
 
   if (enMinutos) tiempo *= 60;
-  let id = Math.floor(Math.random() * 1000000) + 1;
+  let id = Math.floor(Math.random() * 9999999) + 1;
   socket.emit('solicitarItem', {id, nombre, cantidad, tiempo, enMinutos });
 };
 
@@ -745,7 +745,7 @@ btnComenzarFlips?.addEventListener('click', () => {
                         .find(r => r.cells[0]?.textContent === nombre); // buscar por nombre
       if (!fila) continue;
       const cantidad = parseInt(fila.cells[5].textContent) || 1;
-      const idRandom = Math.floor(Math.random() * 1000000) + 1;
+      const idRandom = Math.floor(Math.random() * 9999999) + 1;
 
       socket.emit('solicitarItem', { id: idRandom, nombre, cantidad, tiempo, enMinutos });
     }
@@ -765,7 +765,7 @@ socket.on('resetFinished', (id) => {
                         .find(r => r.cells[0]?.textContent === nombre); // buscar por nombre
       if (!fila) continue;
       const cantidad = parseInt(fila.cells[5].textContent) || 1;
-      const idRandom = Math.floor(Math.random() * 1000000) + 1;
+      const idRandom = Math.floor(Math.random() * 9999999) + 1;
 
       // socket.emit('solicitarItem', { id: idRandom, nombre, cantidad, tiempo, enMinutos });
     }

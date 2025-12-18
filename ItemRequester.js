@@ -20,22 +20,16 @@ class ItemRequester extends EventEmitter {
     this.tiempoAviso = enMinutos ? tiempoAviso * 60 : tiempoAviso;
     this.timers = {};
     this.filledDisparado = false;
-    this.enPanico = false;
     this.minDelay = 200;
     this.maxDelay = 400;
     this.finishedCollecting = false;
-    this.chat = new ChatListener(bot, {
-      excluirPalabras: ['APPEARING OFFLINE', '✎'],
-      palabras: ['Connecting to', 'MiniEspe'],
-      tipos: ['sistema']
-    });
+
 
     this.container = new ContainerInteractor(bot);
     this.skyBlock = new SkyBlockItem();
     this.containerListener = new InventoryListener(bot);
 
     this.precioTotal = null;
-    this.detectarMensajes();
     this.container.setDelay(this.minDelay, this.maxDelay);
 
     this.startStopListener(); // 🔹 Iniciamos listener de stop
@@ -68,20 +62,6 @@ class ItemRequester extends EventEmitter {
     }
   }
 
-  async checkPanic() {
-    if (!this.enPanico) return;
-    //console.log("🛑 MODO PÁNICO ACTIVADO — el bot se congela 1 minuto...");
-    this.minDelay = this.minDelay + 400;
-    this.maxDelay = this.maxDelay + 400;
-    this.container.setDelay(this.minDelay, this.maxDelay);
-    await this.esperar(60000);
-    this.chat.enviar("/skyblock")
-    await this.esperar(5000);
-    this.chat.enviar("/warp garden")
-    await this.esperar(5000);
-    //console.log("🟢 MODO PÁNICO FINALIZADO");
-    this.enPanico = false;
-  }
 
   iniciarTimer() {
     let tiempoRestante = this.tiempoAviso;
@@ -113,31 +93,36 @@ class ItemRequester extends EventEmitter {
   }
 
   destroy() {
-  try {
-    // Limpiar todos los intervalos
-    for (const key in this.timers) {
-      clearInterval(this.timers[key]?.interval);
-      delete this.timers[key];
-    }
-    this.destroyed =true;
-    // Marcar como terminado
-    this.finishedCollecting = true;
-    this.filledDisparado = true;
-   
-    // Quitar listeners de chat
-    if (this.chat?.removeListeners) this.chat.removeListeners();
-    
-    // Quitar todos los listeners de EventEmitter
-    this.removeAllListeners();
+    try {
+      // Limpiar todos los intervalos
+      if (this.panel) {
+        if (this._onStopAll) {
+          this.panel.off('STOP_ALL_REQUESTERS', this._onStopAll);
+          this._onStopAll = null;
+        }
+        if (this._onSendCmdAll) {
+          this.panel.off('SEND_CMD_ALL', this._onSendCmdAll);
+          this._onSendCmdAll = null;
+        }
+      }
 
-    // Opcional: cerrar contenedor si está abierto
-    if (this.container?.cerrarContenedor) this.container.cerrarContenedor();
-  
-    //console.log(`🧹 ItemRequester "${this.customName}" destruido correctamente.`);
-  } catch (err) {
-    console.error("Error al destruir ItemRequester:", err);
+      for (const key in this.timers) {
+        clearInterval(this.timers[key]?.interval);
+        delete this.timers[key];
+      }
+
+      this.destroyed = true;
+      this.finishedCollecting = true;
+      this.filledDisparado = true;
+
+      this.removeAllListeners();
+
+      if (this.container?.cerrarContenedor) this.container.cerrarContenedor();
+    } catch (err) {
+      console.error("Error al destruir ItemRequester:", err);
+    }
   }
-}
+
 
   limpiarNombre(itemName) {
   if (!itemName) return "";
@@ -150,6 +135,19 @@ class ItemRequester extends EventEmitter {
 }
 
 
+  bindPanel(panel) {
+  this.panel = panel;
+
+  
+  panel.on('STOP_ALL_REQUESTERS', this._onStopAll = () => {
+    console.log(`🛑 Requester ${this.id} detenido por el panel`);
+    this.destroy();
+  }); 
+
+}
+
+
+
   async start() {
     //console.log("Iniciando Requester..");
     
@@ -159,7 +157,9 @@ class ItemRequester extends EventEmitter {
     if (this.customName == "restart") {
       console.log("=======================  Iniciando proceso de limpieza: Vaciando bazaar orders.. =======================");
       await this.esperar(1000);
-      this.chat.enviar("/managebazaarorders");
+
+      this.emit('sendCMD', { cmd: "/managebazaarorders" });
+
       await this.esperar(1000);
     
       const items = this.containerListener.obtenerItemsValidos(); // todos los slots válidos
@@ -172,12 +172,12 @@ class ItemRequester extends EventEmitter {
 
       if (coincidencias.length > 0) {
         await this.esperar(400);
-        this.chat.enviar("/boostercookie");
+        this.emit('sendCMD', { cmd: "/boostercookie" });
         await this.esperar(1000);
         for (const item of coincidencias ){
           if (this.destroyed) break;
-          let name = this.limpiarNombre(item.nombreCustom);;
-          await this.container.click({ contiene: name, tipo: 'inventario' });
+          let itemName = this.limpiarNombre(item.nombreCustom);
+          await this.container.click({ contiene: itemName, tipo: 'inventario' });
           await this.esperar(1000);
 
         }
@@ -185,7 +185,7 @@ class ItemRequester extends EventEmitter {
         await this.esperar(1200);
         this.container.cerrarContenedor();
         await this.esperar(800);
-        this.chat.enviar("/managebazaarorders");
+        this.emit('sendCMD', { cmd: "/managebazaarorders" });
       }
 
       await this.esperar(1000);
@@ -194,7 +194,7 @@ class ItemRequester extends EventEmitter {
     for (const item of items) {
       if (this.destroyed) break;
   const slot = item.slot;
-  const name = this.limpiarNombre(item.nombreCustom); // <-- usamos la versión limpia
+  const itemName = this.limpiarNombre(item.nombreCustom); // <-- usamos la versión limpia
   //console.log(`🔹 Procesando item ${name} para reset de buy orders`);
 
   this.finishedCollecting = false;
@@ -207,93 +207,109 @@ class ItemRequester extends EventEmitter {
       //console.log(`⚠️ Item ${name}: Contenedor no abierto, cerrando y abriendo /managebazaarorders`);
       await this.container.cerrarContenedor();
       await this.esperar(1300);
-      this.chat.enviar("/managebazaarorders");
+      this.emit('sendCMD', { cmd: "/managebazaarorders" });
       await this.esperar(1300);
     }
 
     const maxIntentos = 1000;
     let intentos = 0;
 
-    if (!this.containerListener.existeItemEnContenedor({ contiene: name, tipo: "contenedor" })){
+    if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: "contenedor" })){
       //console.log(`⚠️No se ha encontrado el item. Muy probablemente ya haya sido procesado`);
         this.finishedCollecting = true;
     }
 
-    while (this.containerListener.existeItemEnContenedor({ contiene: name, tipo: "contenedor" }) &&
-          intentos < maxIntentos &&
-          !this.containerListener.inventarioMayormenteLleno()) {
-        
-            if (this.destroyed) break;
+    while (intentos < maxIntentos) {
+      if (this.destroyed) break;
+
+      // Chequeos de inventario y contenedor antes de intentar click
+      if (this.containerListener.inventarioMayormenteLleno()) {
+        const inicio = Date.now();
+        while (this.containerListener.inventarioMayormenteLleno()) {
+          if (Date.now() - inicio >= 3000) {
+            console.log("⚠️ Inventario mayormente lleno durante más de 3s");
+            this.finishedCollecting = true;
+            break;
+          }
+          await this.esperar(50);
+        }
+        if (this.finishedCollecting) break; // salir del while principal
+      }
+
+      if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: "contenedor" })) {
+        const inicio = Date.now();
+        while (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: "contenedor" })) {
+          if (Date.now() - inicio >= 3000) {
+            console.log("🔹 [AVISO] No se han detectado más objetos durante más de 3s");
+            this.finishedCollecting = true;
+            break;
+          }
+          await this.esperar(50);
+        }
+        if (this.finishedCollecting) break; // salir del while principal
+      }
+
+      // Aquí seguimos con el click normal
       intentos++;
-      //console.log(`🔹 Slot ${slot}: Intento ${intentos} de click`);
-      await this.container.click({ contiene: name, tipo: 'contenedor' });
-      //await this.esperar(250);
-      await this.checkPanic();
+      // console.log(`🔹 Slot ${slot}: Intento ${intentos} de click`);
+      await this.container.click({ contiene: itemName, tipo: 'contenedor' });
+      await this.esperar(300);
 
       const ventana = this.containerListener.nombreContenedorAbierto();
-      if (ventana === "order options" || this.containerListener.existeItemEnContenedor({ nombreCustom: "Cancel Order", tipo: "contenedor" })) {
+
+      if (ventana === "order options" ||
+          this.containerListener.existeItemEnContenedor({ nombreCustom: "Cancel Order", tipo: "contenedor" })) {
         console.log(`⚠️ Slot ${slot}: Cancelando orden porque se abrió "Order options"`);
         await this.esperar(1200);
         await this.container.click({ nombreCustom: "Cancel Order", tipo: 'contenedor' });
-        await this.checkPanic();
         this.finishedCollecting = true;
         break;
       }
-
-                if (this.containerListener.inventarioMayormenteLleno()) {
-            //console.log(`⚠️ [LOG] Inventario parece mayormente lleno. Comprobando de nuevo en 1 segundo para continuar...`);
-            await this.esperar(250);
-            if (this.containerListener.inventarioMayormenteLleno()) {
-              //console.log(`⚠️ [LOG] Comprobación exitosa, Procediendo a vender los objetos...`);
-            }
-          }
-
-          if (this.containerListener.existeItemEnContenedor({ nombreCustom: "Cancel Order", tipo: "contenedor" })) {
-            console.log(`⚠️ [LOG] Contenedor "Order options" abierto, cancelando orden`);
-              await this.esperar(1200);
-              await this.container.click({ nombreCustom: "Cancel Order", tipo: 'contenedor' });
-              await this.checkPanic();
-
-              this.finishedCollecting = true;
-          } 
-          else if (!this.containerListener.existeItemEnContenedor({ contiene: name, tipo: "contenedor" })) {
-            //console.log(`🔹 [AVISO] Parece que no se ha detectado más objetos, comprobando de nuevo en 1 segundo..`);
-            await this.esperar(1200);
-            if (!this.containerListener.existeItemEnContenedor({ contiene: name, tipo: "contenedor" })) {
-              console.log(`🔹 [AVISO] No se ha encontrado nada después de 1 segundo, siguiendo con el proceso..`);
-              this.finishedCollecting = true;
-            }
-            
-          }
     }
 
 
-    if (!this.containerListener.existeItemEnContenedor({ contiene: name, tipo: "contenedor" })) {
-        console.log(`🔹 Item ${name}: No hay más items en este slot, siguiente slot`);
+
+    if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: "contenedor" })) {
+        console.log(`🔹 Item ${itemName}: No hay más items en este slot, siguiente slot`);
         this.finishedCollecting = true;
       }
 
     //console.log(`🔹 Item ${name}: Cerrando contenedor y enviando /boostercookie`);
     await this.container.cerrarContenedor();
     await this.esperar(1000);
-    this.chat.enviar("/boostercookie");
+    this.emit('sendCMD', { cmd: "/boostercookie" });
     await this.esperar(1000);
-    console.log(`Procesando venta de item ${name}...`);
+    console.log(`Procesando venta de item ${itemName}...`);
     intentos = 0;
     
-    if (!this.containerListener.existeItemEnContenedor({ contiene: name, tipo: 'inventario'})) console.log("Parece que no ha encontrado ningun objeto con ese nombre en el inventario..")
+    if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario'})) console.log("Parece que no ha encontrado ningun objeto con ese nombre en el inventario..")
 
-    while (this.containerListener.existeItemEnContenedor({ contiene: name, tipo: 'inventario'}) && intentos < maxIntentos) {
+    while (intentos < maxIntentos) {
       if (this.destroyed) break;
+
       intentos++;
-      //console.log(`🔹 [LOG] Intento ${intentos}: Click en inventario para "${name}"`);
-      await this.container.click({ contiene: name, tipo: 'inventario' });
-      await this.esperar(500);
-      await this.checkPanic();
+      // console.log(`🔹 [LOG] Intento ${intentos}: Click en inventario para "${name}"`);
+      await this.container.click({ contiene: itemName, tipo: 'inventario' });
+      await this.esperar(250);
+
+      // Comprobar si ya no quedan objetos
+      if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
+        const inicio = Date.now();
+        while (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
+          if (Date.now() - inicio >= 3000) {
+            console.log(`🔹 [AVISO] No se han detectado más objetos de "${itemName}" durante 3s`);
+            this.finishedCollecting = true;
+            break;
+          }
+          await this.esperar(50);
+        }
+        if (this.finishedCollecting) break;
+      }
     }
+
   }
   
-  console.log(`✅ Slot ${slot} con item ${name}: Reset completado`);
+  console.log(`✅ Slot ${slot} con item ${itemName}: Reset completado`);
 }
 
 
@@ -325,7 +341,7 @@ class ItemRequester extends EventEmitter {
       await this.container.cerrarContenedor();
       await this.esperar(1000);
 
-      this.chat.enviar(`/bz ${this.customName}`);
+      this.emit('sendCMD', { cmd: `/bz ${this.customName}` });
       await this.esperar(1000);
 
       const itemClick = await this.container.click({ nombreCustom: this.customName });
@@ -367,53 +383,66 @@ class ItemRequester extends EventEmitter {
   }
 
   detectarMensajes() {
+    if (!this.panel) return;
+
     const nombre = this.customName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     const regexSetup = new RegExp(`Buy Order Setup!.*${nombre}`, 'i');
     const regexComplete = new RegExp(`your buy order.*${nombre}.*was filled!`, 'i');
 
-    this.chat.onceMensajeContiene(
-      /(You have 60 seconds to warp out!|You can't use this when the server is about to restart|Sending packets too fast!|A kick occurred)/i,
-      () => {
-        //console.log("⚠️ PANIC TRIGGER DETECTADO");
-        this.enPanico = true;
-      }
-    );
+    this.panel.on('CHAT_MESSAGE', async (msg) => {
+      const texto = msg.mensaje;
 
-    this.chat.onceMensajeContiene(regexSetup, (msg) => {
-      const match = msg.mensaje.match(/for\s*([\d,.]+)\s*coins/i);
-      if (match && match[1]) {
+    // SETUP
+    if (regexSetup.test(texto)) {
+      const match = texto.match(/for\s*([\d,.]+)\s*coins/i);
+      if (match?.[1]) {
         this.precioTotal = match[1];
-        this.emit('itemCostDetected', { id: this.id, nombre: this.customName, cost: this.precioTotal });
+        this.emit('itemCostDetected', {
+          id: this.id,
+          nombre: this.customName,
+          cost: this.precioTotal
+        });
       }
 
-      this.emit('updateStatus', { id: this.id, nombre: this.customName, estado: 'setup' });
-      //console.log(`ItemRequester con id: ${this.id}, ha pasado a estado SETUP!`);
+      this.emit('updateStatus', {
+        id: this.id,
+        nombre: this.customName,
+        estado: 'setup'
+      });
+    }
 
-    });
+    // RESTART
+    if (
+      /was filled/i.test(texto) &&
+      this.customName?.toLowerCase() === 'restart'
+    ) {
+      await this.esperar(1000);
+      this.emit('cleanFilled');
+    }
 
-    this.chat.onceMensajeContiene(/was filled/i, (msg) => {
-      // Solo nos interesa emitir esto si este requester es el "restart"
-      if (this.customName && this.customName.toLowerCase() === 'restart') {
-        //console.log('🧹 [RESTART] Mensaje "was filled" detectado — emitiendo cleanFilled');
-        this.esperar(1000);
-        this.emit('cleanFilled');
-      }
-    });
-
-    this.chat.onMensajeContiene("You have goods to claim on this order!", async () => {
-      console.log(`ItemRequester con id: ${this.id}, parece que ha detectado más items para reclamar. Volviendo al bazaar para reclamarlos...`);
-      await this.esperar(1000)
+    // GOODS TO CLAIM
+    if (/You have goods to claim on this order!/i.test(texto)) {
+      await this.esperar(1000);
       this.finishedCollecting = false;
-    })
+    }
 
+    // FILLED
+    if (regexComplete.test(texto)) {
+      const precioTotalNPC = await this.skyBlock.calcularPrecioTotal(
+        this.customName,
+        this.cantidad
+      );
 
-    this.chat.onceMensajeContiene(regexComplete, async () => {
-      const precioTotalNPC = await this.skyBlock.calcularPrecioTotal(this.customName, this.cantidad);
-      const precioNum = Number(String(precioTotalNPC).replace(/,/g, '').replace(/coins/gi, '').trim());
-      const precioSetupNum = Number(String(this.precioTotal || 0).replace(/,/g, '').trim());
+      const precioNum = Number(
+        String(precioTotalNPC).replace(/,/g, '').replace(/coins/gi, '').trim()
+      );
+      const precioSetupNum = Number(
+        String(this.precioTotal || 0).replace(/,/g, '').trim()
+      );
+
       const ganancia = precioNum - precioSetupNum;
-      //console.log(`ItemRequester con id: ${this.id}, ha pasado a estado FILLED!!!`);
+
       this.emit('itemTotalDetected', {
         id: this.id,
         nombre: this.customName,
@@ -428,21 +457,22 @@ class ItemRequester extends EventEmitter {
         estado: 'setup_complete'
       });
 
-      const filledTask = this.getFilledTask();
       this.emit('readyForFilled', {
         id: this.id,
         nombre: this.customName,
         cantidad: this.cantidad,
         tiempo: this.tiempoAviso,
-        task: filledTask
+        task: this.getFilledTask()
       });
-    });
-  }
+    }
+  });
+}
+
 
   getFilledTask() {
     const nombre = this.customName;
     const cantidad = this.cantidad;
-
+    let itemName = this.limpiarNombre(this.customName);
     return async () => {
 
       // 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩
@@ -470,7 +500,7 @@ while (!this.finishedCollecting) {
           await this.container.cerrarContenedor();
           await this.esperar(1300);
           //console.log(`🔹 [LOG] Enviando comando /managebazaarorders`);
-          this.chat.enviar("/managebazaarorders");
+          this.emit('sendCMD', { cmd: "/managebazaarorders" });
           await this.esperar(1300);
       }
 
@@ -483,69 +513,86 @@ while (!this.finishedCollecting) {
       let intentos = 0;
       const maxIntentos = 1000;
 
-      while (this.containerListener.existeItemEnContenedor({ nombreCustom: buyOrderName, tipo: "contenedor" }) && intentos < maxIntentos && !this.containerListener.inventarioMayormenteLleno()) {
-          intentos++;
-          if (this.destroyed) break;
-          //console.log(`🔹 [LOG] Intento ${intentos}: Click en "${buyOrderName}"`);
+      while (intentos < maxIntentos) {
+      if (this.destroyed) break;
 
-           await this.container.click({ nombreCustom: buyOrderName, tipo: 'contenedor' });
-          //await this.esperar(250);
-          await this.checkPanic();
-
-          if (this.containerListener.nombreContenedorAbierto() === "order options") {
-              console.log(`⚠️ [LOG] Contenedor "Order options" abierto, cancelando orden`);
-              await this.esperar(1200);
-              await this.container.click({ nombreCustom: "Cancel Order", tipo: 'contenedor' });
-              await this.checkPanic();
-
-              this.finishedCollecting = true;
+      // Chequeos de inventario y contenedor antes de intentar click
+      if (this.containerListener.inventarioMayormenteLleno()) {
+        const inicio = Date.now();
+        while (this.containerListener.inventarioMayormenteLleno()) {
+          if (Date.now() - inicio >= 3000) {
+            console.log("⚠️ Inventario mayormente lleno durante más de 3s");
+            this.finishedCollecting = true;
+            break;
           }
-          
-
-          if (this.containerListener.inventarioMayormenteLleno()) {
-            console.log(`⚠️ [LOG] Inventario parece mayormente lleno. Comprobando de nuevo en 1 segundo para continuar...`);
-            await this.esperar(500);
-            if (this.containerListener.inventarioMayormenteLleno()) {
-              console.log(`⚠️ [LOG] Comprobación exitosa, Procediendo a vender los objetos...`);
-            }
-          }
-
-          if (this.containerListener.existeItemEnContenedor({ nombreCustom: "Cancel Order", tipo: "contenedor" })) {
-            console.log(`⚠️ [LOG] Contenedor "Order options" abierto, cancelando orden`);
-              await this.esperar(1200);
-              await this.container.click({ nombreCustom: "Cancel Order", tipo: 'contenedor' });
-              await this.checkPanic();
-
-              this.finishedCollecting = true;
-          } 
-          else if (!this.containerListener.existeItemEnContenedor({ nombreCustom: buyOrderName, tipo: "contenedor" })) {
-            console.log(`🔹 [AVISO] Parece que no se ha detectado más objetos, comprobando de nuevo en 1 segundo..`);
-            await this.esperar(1200);
-            if (!this.containerListener.existeItemEnContenedor({ nombreCustom: buyOrderName, tipo: "contenedor" })) {
-              console.log(`🔹 [AVISO] No se ha encontrado nada después de 1 segundo, siguiendo con el proceso..`);
-              this.finishedCollecting = true;
-            }
-            
-          }
+          await this.esperar(50);
+        }
+        if (this.finishedCollecting) break; // salir del while principal
       }
+
+      if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: "contenedor" })) {
+        const inicio = Date.now();
+        while (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: "contenedor" })) {
+          if (Date.now() - inicio >= 3000) {
+            console.log("🔹 [AVISO] No se han detectado más objetos durante más de 3s");
+            this.finishedCollecting = true;
+            break;
+          }
+          await this.esperar(50);
+        }
+        if (this.finishedCollecting) break; // salir del while principal
+      }
+
+      // Aquí seguimos con el click normal
+      intentos++;
+      // console.log(`🔹 Slot ${slot}: Intento ${intentos} de click`);
+      await this.container.click({ contiene: itemName, tipo: 'contenedor' });
+      await this.esperar(300);
+
+      const ventana = this.containerListener.nombreContenedorAbierto();
+
+      if (ventana === "order options" ||
+          this.containerListener.existeItemEnContenedor({ nombreCustom: "Cancel Order", tipo: "contenedor" })) {
+        console.log(`⚠️ Slot ${slot}: Cancelando orden porque se abrió "Order options"`);
+        await this.esperar(1200);
+        await this.container.click({ nombreCustom: "Cancel Order", tipo: 'contenedor' });
+        this.finishedCollecting = true;
+        break;
+      }
+    }
+
+
       if (this.destroyed) break;
       //console.log(`🔹 [LOG] Cerrando contenedor después de procesar buy orders`);
       await this.container.cerrarContenedor();
       await this.esperar(1000);
-      //console.log(`🔹 [LOG] Enviando /boostercookie`);
-      this.chat.enviar("/boostercookie");
+      this.emit('sendCMD', { cmd: "/boostercookie" });
       await this.esperar(1000);
 
       intentos = 0;
-      while (this.containerListener.existeItemEnContenedor({contiene: nombre, tipo: 'inventario'}) && intentos < maxIntentos) {
-          intentos++;
-          if (this.destroyed) break;
-          //console.log(`🔹 [LOG] Intento ${intentos}: Click en inventario para "${nombre}"`);
-          await this.container.click({ contiene: nombre, tipo: 'inventario' });
-          await this.esperar(500);
-          await this.checkPanic();
+      while (intentos < maxIntentos) {
+        if (this.destroyed) break;
 
+        intentos++;
+        // console.log(`🔹 [LOG] Intento ${intentos}: Click en inventario para "${name}"`);
+        await this.container.click({ contiene: itemName, tipo: 'inventario' });
+        await this.esperar(250);
+
+        // Comprobar si ya no quedan objetos
+        if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
+          const inicio = Date.now();
+          while (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
+            if (Date.now() - inicio >= 3000) {
+              console.log(`🔹 [AVISO] No se han detectado más objetos de "${itemName}" durante 3s`);
+              this.finishedCollecting = true;
+              break;
+            }
+            await this.esperar(50);
+          }
+          if (this.finishedCollecting) break;
+        }
       }
+
 
       //console.log(`🔹 [LOG] Espera final de 400ms antes de cerrar contenedor`);
       await this.esperar(1200);
@@ -556,7 +603,7 @@ while (!this.finishedCollecting) {
       this.filledDisparado = false;
       this.destroy();
       const cantidadFinal = this.cantidad || 0; // cantidad que realmente se procesó
-const tiempoFinal = this.tiempoAviso || 60; // tiempo restante o predeterminado
+      const tiempoFinal = this.tiempoAviso || 60; // tiempo restante o predeterminado
 
 console.log(`✅ [LOG] Marcando item "${nombre}" como filled`);
 this.emit('updateItemStatus', {id: this.id, nombre: this.customName, estado: 'filled' });
@@ -564,18 +611,6 @@ this.emit('updateItemStatus', {id: this.id, nombre: this.customName, estado: 'fi
 // Reencolado (solo prepara los datos)
 if (!this._yaReencolado) {
     this._yaReencolado = true;
-
-    //console.log(`🔄 [LOG] Preparando reencolado para "${this.customName}"`);
-    //console.log(`🔹 [LOG] Datos para el nuevo requester -> cantidad: ${cantidadFinal}, tiempo: ${tiempoFinal}`);
-
-    /*this.emit('readyForFilled', {
-      nombre: this.customName,
-      cantidad: cantidadFinal,
-      tiempo: tiempoFinal,
-      task: this.getFilledTask(cantidadFinal, tiempoFinal) // pasamos los valores finales
-    }); */
-
-    //console.log(`📤 [LOG] Evento 'readyForFilled' emitido para "${this.customName}"`);
 }
 
 
@@ -584,16 +619,6 @@ if (!this._yaReencolado) {
         // 🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥🟥
       };
     }
-
-
-
-    orderReset() {
-
-    }
-
-
-
-
 
 }
 
