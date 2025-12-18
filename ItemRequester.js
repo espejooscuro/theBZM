@@ -139,7 +139,7 @@ class ItemRequester extends EventEmitter {
   this.panel = panel;
 
   
-  panel.on('STOP_ALL_REQUESTERS', this._onStopAll = () => {
+  panel.once('STOP_ALL_REQUESTERS', this._onStopAll = () => {
     console.log(`🛑 Requester ${this.id} detenido por el panel`);
     this.destroy();
   }); 
@@ -251,7 +251,6 @@ class ItemRequester extends EventEmitter {
 
       // Aquí seguimos con el click normal
       intentos++;
-      // console.log(`🔹 Slot ${slot}: Intento ${intentos} de click`);
       await this.container.click({ contiene: itemName, tipo: 'contenedor' });
       await this.esperar(300);
 
@@ -545,7 +544,6 @@ while (!this.finishedCollecting) {
 
       // Aquí seguimos con el click normal
       intentos++;
-      // console.log(`🔹 Slot ${slot}: Intento ${intentos} de click`);
       await this.container.click({ contiene: itemName, tipo: 'contenedor' });
       await this.esperar(300);
 
@@ -553,7 +551,6 @@ while (!this.finishedCollecting) {
 
       if (ventana === "order options" ||
           this.containerListener.existeItemEnContenedor({ nombreCustom: "Cancel Order", tipo: "contenedor" })) {
-        console.log(`⚠️ Slot ${slot}: Cancelando orden porque se abrió "Order options"`);
         await this.esperar(1200);
         await this.container.click({ nombreCustom: "Cancel Order", tipo: 'contenedor' });
         this.finishedCollecting = true;
