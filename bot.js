@@ -38,17 +38,23 @@ async function startBot() {
 
     bot.on('error', err => {
       console.log('❌ Error de red:', err.message)
-      bot.emit('errorReset');
+      //bot.emit('errorReset');
     })
 
     process.on('uncaughtException', err => {
     console.log('⚠ Excepción no capturada, ignorada:', err.message)
     });
 
-    bot.on('end', reason => {
+    bot.on('end', async reason => {
       console.log('🔌 Conexión cerrada:', reason)
 
+      if (typeof reason === 'string' && reason.includes('socketClosed')) {
+        console.log('⏳ Esperando 5 minutos para reset...')
+        await delay(5 * 60 * 1000) // 5 minutos
+        bot.emit('errorReset')
+      }
     })
+
 
     invListener = new InventoryListener(bot);
     interactor = new ContainerInteractor(bot, 150, 350);
@@ -61,10 +67,10 @@ async function startBot() {
 
     // Emitir evento crítico
     chat.onceMensajeContiene(
-      /You have 60 seconds to warp out|You can't use this when the server is about to restart|Sending packets too fast|kick occurred in your connection, so you were put in the SkyBlock lobby|were spawned in Limbo/i,
+      /You have 60 seconds to warp out|You can't use this when the server is about to restart|Sending packets too fast|kick occurred in your connection, so you were put in the SkyBlock lobby|were spawned in Limbo|You reached your maximum of/i,
       (registro) => {
         console.log('⚠️ Mensaje crítico detectado, solicitando reinicio del bot:', registro.mensaje);
-        bot.emit('mensajeCritico', registro); // aquí ya es el mismo bot
+        bot.emit('mensajeCritico', registro); // aquí ya es el mismo bot  
       }
     );
 
