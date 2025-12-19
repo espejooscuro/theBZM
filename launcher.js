@@ -5,23 +5,18 @@ const fs = require("fs");
 console.log("🚀 BZM Multi Launcher");
 
 const basePath = path.dirname(process.execPath);
-let botPath;
-
-if (process.platform === "win32") {
-  botPath = path.join(basePath, "bzm-bot.exe");
-} else if (process.platform === "linux" || process.platform === "darwin") {
-  botPath = path.join(basePath, "bzm-bot"); // sin extensión en Linux/macOS
-} else {
-  console.error("❌ Sistema operativo no soportado");
-  process.exit(1);
-}
+const botPath = process.platform === "win32"
+  ? path.join(basePath, "bzm-bot.exe")
+  : path.join(basePath, "bzm-bot");
 
 const cuentasPath = path.join(basePath, "cuentas.json");
-
 if (!fs.existsSync(cuentasPath)) {
   fs.writeFileSync(
     cuentasPath,
-    JSON.stringify([{ username: "usuario_microsoft" }], null, 2)
+    JSON.stringify([
+      { username: "MiniEspe" },
+      { username: "nuwifer", proxy: "socks5://184.185.2.91:4145" }
+    ], null, 2)
   );
   console.log("📝 cuentas.json creado. Rellénalo y reinicia.");
   process.exit(0);
@@ -31,25 +26,29 @@ const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
 class BotController {
-  constructor(username, port) {
+  constructor(username, port, proxy) {
     this.username = username;
     this.port = port;
+    this.proxy = proxy; // Proxy opcional
     this.process = null;
     this.resetLongActive = false;
   }
 
-  async start() {
+  start() {
     return new Promise(resolve => {
+      console.log(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
+
       this.process = spawn(botPath, ["--account", this.username], {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, BOT_PORT: this.port },
-        detached: process.platform !== "win32" // Linux/macOS: proceso independiente
+        env: {
+          ...process.env,
+          BOT_PORT: this.port,
+          SOCKS_PROXY: this.proxy || ""
+        },
+        detached: process.platform !== "win32"
       });
 
-      // Desacoplar el hijo en Linux/macOS
-      if (process.platform !== "win32") {
-        this.process.unref();
-      }
+      if (process.platform !== "win32") this.process.unref();
 
       this.process.stdout.on("data", data => {
         const msg = data.toString();
@@ -83,16 +82,14 @@ class BotController {
   async resetBot(waitMinutes = 1) {
     console.log(`♻️ [${this.username}] Reset automático iniciado`);
     this.kill();
-    await new Promise(r => setTimeout(r, waitMinutes * 60 * 1000));
+    await delay(waitMinutes * 60 * 1000);
     await this.start();
     console.log(`♻️ [${this.username}] Bot reiniciado después de ${waitMinutes} minuto(s)`);
   }
 
   initScheduler() {
     setInterval(async () => {
-      if (!this.resetLongActive) {
-        await this.resetBot(1);
-      }
+      if (!this.resetLongActive) await this.resetBot(1);
     }, 90 * 60 * 1000);
 
     setInterval(async () => {
@@ -108,16 +105,13 @@ class BotController {
   const startPort = 3000;
 
   for (let i = 0; i < cuentas.length; i++) {
-    const { username } = cuentas[i];
-    const controller = new BotController(username, startPort + i);
-    await controller.start(); // puedes mantener await o lanzar en paralelo sin await
+    const { username, proxy } = cuentas[i];
+    const controller = new BotController(username, startPort + i, proxy);
+    await controller.start();
     bots.push(controller);
 
-    console.log(`🚀 Bot ${username} iniciado, esperando 20s para el siguiente...`);
-    // En el launcher, aumenta el delay entre bots
-    const delayEntreBots = 90 * 1000; // 90s
-    await delay(delayEntreBots);
-
+    console.log(`🚀 Bot ${username} iniciado, esperando 90s para el siguiente...`);
+    await delay(10 * 1000); // delay entre bots
   }
 
   process.on("SIGINT", () => {
