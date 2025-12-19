@@ -42,8 +42,14 @@ class BotController {
     return new Promise(resolve => {
       this.process = spawn(botPath, ["--account", this.username], {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, BOT_PORT: this.port }
+        env: { ...process.env, BOT_PORT: this.port },
+        detached: process.platform !== "win32" // Linux/macOS: proceso independiente
       });
+
+      // Desacoplar el hijo en Linux/macOS
+      if (process.platform !== "win32") {
+        this.process.unref();
+      }
 
       this.process.stdout.on("data", data => {
         const msg = data.toString();
@@ -104,7 +110,7 @@ class BotController {
   for (let i = 0; i < cuentas.length; i++) {
     const { username } = cuentas[i];
     const controller = new BotController(username, startPort + i);
-    await controller.start();
+    await controller.start(); // puedes mantener await o lanzar en paralelo sin await
     bots.push(controller);
 
     console.log(`🚀 Bot ${username} iniciado, esperando 20s para el siguiente...`);

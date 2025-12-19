@@ -8,10 +8,17 @@ const fs = require('fs');
 const path = require('path');
 
 const basePath = process.pkg ? path.dirname(process.execPath) : __dirname;
-const estadoPath = path.join(basePath, 'estado.json');
 
-if (!fs.existsSync(estadoPath)) {
-  fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
+function getEstadoPath(username) {
+  return path.join(basePath, `estado_${username}.json`);
+}
+
+function ensureEstado(username) {
+  const estadoPath = getEstadoPath(username);
+  if (!fs.existsSync(estadoPath)) {
+    fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
+  }
+  return estadoPath;
 }
 
 function delay(ms) {
@@ -25,10 +32,12 @@ function log(username, ...args) {
 async function startBot(username) {
   if (!username) {
     console.error("❌ Debes pasar un username válido");
-    process.exit(1);
+    return; // no cerramos todo el launcher
   }
 
   console.log(`Iniciando bot para: ${username}`);
+
+  const estadoPath = ensureEstado(username);
 
   const bot = mineflayer.createBot({
     host: 'mc.hypixel.net',
@@ -54,16 +63,19 @@ async function startBot(username) {
     excluirPalabras: ['APPEARING OFFLINE', '✎']
   });
 
+  // Mensajes críticos: solo cerramos el bot, no todo el launcher
   chat.onceMensajeContiene(/You have 60 seconds|restart|Sending packets too fast|Limbo|maximum of/i, registro => {
     log(username, '⚠️ Mensaje crítico:', registro.mensaje);
     bot.end();
-    process.exit(10);
+    process.exitCode = 10;
+    process.exit();
   });
 
   bot.once('duplicateBoughtReset', ({ nombre }) => {
     log(username, '❌ Dupe detectado:', nombre);
     bot.end();
-    process.exit(12);
+    process.exitCode = 12; // el launcher reinicia procesos con código 12
+    process.exit();
   });
 
   bot.once('spawn', async () => {
@@ -88,7 +100,7 @@ async function startBot(username) {
 
     } catch (e) {
       log(username, '❌ Error en spawn:', e);
-      process.exit(11);
+      bot.end();
     }
   });
 }
@@ -106,7 +118,7 @@ if (require.main === module) {
 
   startBot(username).catch(err => {
     console.error("❌ Error crítico:", err);
-    process.exit(11);
+    // no cerramos todo el launcher
   });
 }
 
