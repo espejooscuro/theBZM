@@ -1,6 +1,5 @@
 const { spawn } = require("child_process");
 const path = require("path");
-const fs = require("fs");
 
 console.log("🚀 Lanzando BZM Launcher (ejecutable principal). No ejecutes el bot manualmente.");
 
@@ -16,12 +15,18 @@ const EXIT_CODES = {
 
 let botProcess = null;
 let isRestarting = false;
-let nextTimeout = null;
+let shortTimeout = null;
+let longTimeout = null;
+let longRestarting = false; // Flag para reinicio largo activo
 
-const TEST_SHORT = 30 * 1000;
-const TEST_LONG  = 60 * 1000;
-const PROD_SHORT = 90 * 60 * 1000;
-const PROD_LONG  = 16 * 60 * 60 * 1000;
+const TEST_SHORT = 30 * 1000;       // 30s
+const TEST_LONG  = 60 * 1000;       // 1min
+const PROD_SHORT = 90 * 60 * 1000;  // 1h 30min
+const PROD_LONG  = 16 * 60 * 60 * 1000; // 16h
+
+const isTest = process.env.TEST_TIMER === "1";
+const SHORT_INTERVAL = isTest ? TEST_SHORT : PROD_SHORT;
+const LONG_INTERVAL  = isTest ? TEST_LONG  : PROD_LONG;
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -40,7 +45,7 @@ function startBot() {
       code === EXIT_CODES.DUPE_RESET
     ) {
       console.log("🔄 Reiniciando bot por evento crítico...");
-      await delay(5000);
+      await delay(5000); // espera 5s antes de reiniciar
       startBot();
     }
   });
@@ -53,30 +58,46 @@ function killBot() {
   }
 }
 
-function programarReinicio() {
-  const isTest = process.env.TEST_TIMER === "1";
-  const shortInterval = isTest ? TEST_SHORT : PROD_SHORT;
-  const longInterval  = isTest ? TEST_LONG  : PROD_LONG;
+// Reinicio corto: espera entre apagar y encender
+function programarReinicioCorto() {
+  clearTimeout(shortTimeout);
+  shortTimeout = setTimeout(async () => {
+    if (longRestarting) {
+      console.log("⏳ Reinicio corto saltado porque hay reinicio largo activo");
+      programarReinicioCorto();
+      return;
+    }
 
-  const now = Date.now();
-
-  // Elegimos cuál intervalo usar: largo prioriza sobre corto
-  const nextInterval = longInterval < shortInterval ? longInterval : shortInterval;
-
-  nextTimeout = setTimeout(async () => {
-    console.log("⏰ Reiniciando bot por temporizador...");
+    console.log(`⏰ Reinicio corto ejecutándose (apagando bot, espera ${isTest ? "5s" : "5s real"})...`);
     killBot();
+    await delay(5000);
     startBot();
-    programarReinicio(); // reprograma el siguiente reinicio
-  }, nextInterval);
+    programarReinicioCorto();
+  }, SHORT_INTERVAL);
+}
+
+// Reinicio largo: espera entre apagar y encender
+function programarReinicioLargo() {
+  clearTimeout(longTimeout);
+  longTimeout = setTimeout(async () => {
+    longRestarting = true;
+    console.log(`⏰ Reinicio largo ejecutándose (apagando bot, espera ${isTest ? "10s" : "8h"})...`);
+    killBot();
+    await delay(isTest ? 10 * 1000 : 8 * 60 * 60 * 1000);
+    startBot();
+    longRestarting = false;
+    programarReinicioLargo();
+  }, LONG_INTERVAL);
 }
 
 process.on("SIGINT", () => {
-  clearTimeout(nextTimeout);
+  clearTimeout(shortTimeout);
+  clearTimeout(longTimeout);
   killBot();
   process.exit(0);
 });
 
 // inicio
 startBot();
-programarReinicio();
+programarReinicioCorto();
+programarReinicioLargo();
