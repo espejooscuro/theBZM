@@ -114,7 +114,10 @@ class BotController {
     bots.push(controller);
 
     console.log(`🚀 Bot ${username} iniciado, esperando 20s para el siguiente...`);
-    await delay(20000);
+    // En el launcher, aumenta el delay entre bots
+    const delayEntreBots = 90 * 1000; // 90s
+    await delay(delayEntreBots);
+
   }
 
   process.on("SIGINT", () => {

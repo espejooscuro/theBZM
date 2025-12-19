@@ -13,6 +13,7 @@ function getEstadoPath(username) {
   return path.join(basePath, `estado_${username}.json`);
 }
 
+
 function ensureEstado(username) {
   const estadoPath = getEstadoPath(username);
   if (!fs.existsSync(estadoPath)) {
@@ -27,6 +28,10 @@ function delay(ms) {
 
 function log(username, ...args) {
   console.log(`[${username}]`, ...args);
+}
+
+function jitterDelay(ms) {
+  return delay(ms + Math.random() * 1500); // añade 0-1.5s aleatorio
 }
 
 async function startBot(username) {
@@ -109,17 +114,17 @@ process.on('unhandledRejection', (reason, promise) => {
       const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
       const panel = new Panel(bot, { username, port: panelPort });
 
-      await delay(4000);
+      await jitterDelay(4000);
       chat.enviar('/skyblock');
-      await delay(5000);
+      await jitterDelay(5000);
       chat.enviar('/warp garden');
-      await delay(5000);
+      await jitterDelay(5000);
       chat.enviar('/viewstash material');
-      await delay(2000);
+      await jitterDelay(2000);
       itemClicker.click({ contiene: "Sell Stash Now", tipo: 'contenedor' });
-      await delay(2000);
+      await jitterDelay(2000);
       itemClicker.click({ contiene: "Selling whole inventory", tipo: 'contenedor' });
-      await delay(5000);
+      await jitterDelay(5000);
       log(username, '✅ Conectado');
       console.log("READY"); // Señal para el launcher
       panel.manualReset();
