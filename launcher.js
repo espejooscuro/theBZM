@@ -5,7 +5,17 @@ const fs = require("fs");
 console.log("🚀 BZM Multi Launcher");
 
 const basePath = path.dirname(process.execPath);
-const botPath = path.join(basePath, "bzm-bot.exe"); // exe del bot
+let botPath;
+
+if (process.platform === "win32") {
+  botPath = path.join(basePath, "bzm-bot.exe");
+} else if (process.platform === "linux" || process.platform === "darwin") {
+  botPath = path.join(basePath, "bzm-bot"); // sin extensión en Linux/macOS
+} else {
+  console.error("❌ Sistema operativo no soportado");
+  process.exit(1);
+}
+
 const cuentasPath = path.join(basePath, "cuentas.json");
 
 if (!fs.existsSync(cuentasPath)) {
@@ -25,7 +35,7 @@ class BotController {
     this.username = username;
     this.port = port;
     this.process = null;
-    this.resetLongActive = false; // Flag para bloqueos de resets cortos durante largos
+    this.resetLongActive = false;
   }
 
   async start() {
@@ -53,7 +63,6 @@ class BotController {
         }
       });
 
-      // Iniciar scheduler de resets automáticos
       this.initScheduler();
     });
   }
@@ -74,22 +83,19 @@ class BotController {
   }
 
   initScheduler() {
-    // Reset corto: cada 1,5 horas (90 min), espera 1 min
     setInterval(async () => {
       if (!this.resetLongActive) {
         await this.resetBot(1);
       }
     }, 90 * 60 * 1000);
 
-    // Reset largo: cada 16 horas, espera 8 horas
     setInterval(async () => {
       this.resetLongActive = true;
-      await this.resetBot(8 * 60); // espera 8 horas antes de relanzar
+      await this.resetBot(8 * 60);
       this.resetLongActive = false;
     }, 16 * 60 * 60 * 1000);
   }
 }
-
 
 (async () => {
   const bots = [];
@@ -97,7 +103,7 @@ class BotController {
 
   for (let i = 0; i < cuentas.length; i++) {
     const { username } = cuentas[i];
-    const controller = new BotController(username, startPort + i); // Cada bot un puerto distinto
+    const controller = new BotController(username, startPort + i);
     await controller.start();
     bots.push(controller);
 
