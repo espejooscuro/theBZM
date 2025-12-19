@@ -25,7 +25,6 @@ function delay(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// Logs simples, el color real se aplica en el launcher
 function log(username, ...args) {
   console.log(`[${username}]`, ...args);
 }
@@ -33,7 +32,7 @@ function log(username, ...args) {
 async function startBot(username) {
   if (!username) {
     console.error("❌ Debes pasar un username válido");
-    return;
+    return; // no cerramos todo el launcher
   }
 
   console.log(`Iniciando bot para: ${username}`);
@@ -64,6 +63,7 @@ async function startBot(username) {
     excluirPalabras: ['APPEARING OFFLINE', '✎']
   });
 
+  // Mensajes críticos: solo cerramos el bot, no todo el launcher
   chat.onMensajeContiene(/You have 60 seconds|restart|Sending packets too fast|Limbo|maximum of/i, registro => {
     log(username, '⚠️ Mensaje crítico:', registro.mensaje);
     bot.end();
@@ -74,8 +74,8 @@ async function startBot(username) {
   bot.on('duplicateBoughtReset', ({ nombre }) => {
     log(username, '❌ Dupe detectado:', nombre);
     bot.end();
-    process.exitCode = 12;
-    process.exit();
+    process.exitCode = 12; // el launcher reinicia procesos con código 12
+  process.exit();
   });
 
   bot.once('spawn', async () => {
@@ -84,6 +84,7 @@ async function startBot(username) {
       estado.finished = false;
       fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
 
+      // Tomar el puerto del launcher
       const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
       const panel = new Panel(bot, { username, port: panelPort });
 
@@ -91,14 +92,13 @@ async function startBot(username) {
       chat.enviar('/skyblock');
       await delay(5000);
       chat.enviar('/warp garden');
-      await delay(6000);
+      await delay(5000);
       chat.enviar('/viewstash material');
       await delay(2000);
       itemClicker.click({ contiene: "Sell Stash Now", tipo: 'contenedor' });
       await delay(2000);
       itemClicker.click({ contiene: "Selling whole inventory", tipo: 'contenedor' });
-      await delay(2000);
-
+      await delay(5000);
       log(username, '✅ Conectado');
       console.log("READY"); // Señal para el launcher
       panel.manualReset();
@@ -110,6 +110,7 @@ async function startBot(username) {
   });
 }
 
+// Ejecutar automáticamente si se llama desde la línea de comandos
 if (require.main === module) {
   const args = process.argv.slice(2);
   let username = null;
@@ -122,6 +123,7 @@ if (require.main === module) {
 
   startBot(username).catch(err => {
     console.error("❌ Error crítico:", err);
+    // no cerramos todo el launcher
   });
 }
 

@@ -10,7 +10,7 @@ let botPath;
 if (process.platform === "win32") {
   botPath = path.join(basePath, "bzm-bot.exe");
 } else if (process.platform === "linux" || process.platform === "darwin") {
-  botPath = path.join(basePath, "bzm-bot");
+  botPath = path.join(basePath, "bzm-bot"); // sin extensión en Linux/macOS
 } else {
   console.error("❌ Sistema operativo no soportado");
   process.exit(1);
@@ -30,81 +30,41 @@ if (!fs.existsSync(cuentasPath)) {
 const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-/* ===== COLORES ===== */
-const colors = {
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  white: '\x1b[37m',
-  reset: '\x1b[0m'
-};
-const colorList = ['red','green','yellow','blue','magenta','cyan','white'];
-const userColors = {};
-
-function getUserColor(username) {
-  if (!userColors[username]) {
-    const free = colorList.find(c => !Object.values(userColors).includes(c));
-    userColors[username] = free || 'white';
-  }
-  return userColors[username];
-}
-
-/* ===== BOT CONTROLLER ===== */
 class BotController {
   constructor(username, port) {
     this.username = username;
     this.port = port;
     this.process = null;
     this.resetLongActive = false;
-    this.ready = false;
   }
 
   async start() {
     return new Promise(resolve => {
-      console.log(`🚀 Lanzando bot ${this.username}`);
-
-      this.process = spawn(
-      botPath,
-      ["--account", this.username],
-      {
+      this.process = spawn(botPath, ["--account", this.username], {
         stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          BOT_PORT: this.port,
-          NODE_OPTIONS: "--dns-result-order=ipv4first"
-        }
+        env: { ...process.env, BOT_PORT: this.port },
+        detached: process.platform !== "win32" // Linux/macOS: proceso independiente
+      });
+
+      // Desacoplar el hijo en Linux/macOS
+      if (process.platform !== "win32") {
+        this.process.unref();
       }
-    );
-
-
-      const color = getUserColor(this.username);
 
       this.process.stdout.on("data", data => {
         const msg = data.toString();
-        process.stdout.write(
-          `${colors[color]}[${this.username}]${colors.reset} ${msg}`
-        );
-        if (!this.ready && msg.includes("READY")) {
-          this.ready = true;
-          resolve();
-        }
+        process.stdout.write(`[${this.username}] ${msg}`);
+        if (msg.includes("READY")) resolve();
       });
 
-      this.process.stderr.on("data", data => {
-        process.stderr.write(
-          `${colors[color]}[${this.username} ERROR]${colors.reset} ${data}`
-        );
-      });
+      this.process.stderr.on("data", data =>
+        process.stderr.write(`[${this.username} ERROR] ${data}`)
+      );
 
       this.process.on("exit", code => {
         console.log(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
-        this.ready = false;
-
         if ([10, 11, 12].includes(code)) {
-          console.log(`🔄 [${this.username}] Reinicio automático`);
+          console.log(`🔄 [${this.username}] Reinicio por código ${code}`);
           setTimeout(() => this.start(), 5000);
         }
       });
@@ -115,22 +75,24 @@ class BotController {
 
   kill() {
     if (this.process) {
-      console.log(`🛑 [${this.username}] Deteniendo bot`);
       this.process.kill("SIGKILL");
       this.process = null;
     }
   }
 
   async resetBot(waitMinutes = 1) {
-    console.log(`♻️ [${this.username}] Reset programado`);
+    console.log(`♻️ [${this.username}] Reset automático iniciado`);
     this.kill();
-    await delay(waitMinutes * 60 * 1000);
+    await new Promise(r => setTimeout(r, waitMinutes * 60 * 1000));
     await this.start();
+    console.log(`♻️ [${this.username}] Bot reiniciado después de ${waitMinutes} minuto(s)`);
   }
 
   initScheduler() {
     setInterval(async () => {
-      if (!this.resetLongActive) await this.resetBot(1);
+      if (!this.resetLongActive) {
+        await this.resetBot(1);
+      }
     }, 90 * 60 * 1000);
 
     setInterval(async () => {
@@ -141,7 +103,6 @@ class BotController {
   }
 }
 
-/* ===== MAIN ===== */
 (async () => {
   const bots = [];
   const startPort = 3000;
@@ -149,14 +110,14 @@ class BotController {
   for (let i = 0; i < cuentas.length; i++) {
     const { username } = cuentas[i];
     const controller = new BotController(username, startPort + i);
-    await controller.start();
+    await controller.start(); // puedes mantener await o lanzar en paralelo sin await
     bots.push(controller);
-    console.log(`⏳ Esperando 20s antes del siguiente bot...`);
+
+    console.log(`🚀 Bot ${username} iniciado, esperando 20s para el siguiente...`);
     await delay(20000);
   }
 
   process.on("SIGINT", () => {
-    console.log("🛑 Apagando todos los bots");
     bots.forEach(b => b.kill());
     process.exit(0);
   });
