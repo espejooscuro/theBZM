@@ -10,118 +10,104 @@ const path = require('path');
 const basePath = process.pkg ? path.dirname(process.execPath) : __dirname;
 const estadoPath = path.join(basePath, 'estado.json');
 
-/* ---------- EXIT CODES ---------- */
-const EXIT_CODES = {
-  MENSAJE_CRITICO: 10,
-  ERROR_RESET: 11,
-  DUPE_RESET: 12,
-  FATAL: 1
-};
-
-/* ---------- estado ---------- */
 if (!fs.existsSync(estadoPath)) {
   fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
 }
 
-let bot = null;
-let invListener = null;
-let interactor = null;
-let scoreboard = null;
-let chat = null;
-let panel = null;
-
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(r => setTimeout(r, ms));
 }
 
-/* ---------- BOT ---------- */
-async function startBot() {
-  return new Promise((resolve, reject) => {
+function log(username, ...args) {
+  console.log(`[${username}]`, ...args);
+}
 
-    bot = mineflayer.createBot({
-      host: 'mc.hypixel.net',
-      port: 25565,
-      auth: 'microsoft',
-      version: '1.8.9',
-      keepAlive: true,
-      timeout: 60000,
-      connectTimeout: 120000
-    });
+async function startBot(username) {
+  if (!username) {
+    console.error("❌ Debes pasar un username válido");
+    process.exit(1);
+  }
 
-    bot.on('error', err => {
-      console.log('❌ Error de red:', err.message);
-    });
+  console.log(`Iniciando bot para: ${username}`);
 
-    process.on('uncaughtException', err => {
-      console.log('⚠ Excepción no capturada:', err.message);
-      process.exit(EXIT_CODES.FATAL);
-    });
+  const bot = mineflayer.createBot({
+    host: 'mc.hypixel.net',
+    port: 25565,
+    auth: 'microsoft',
+    username,
+    version: '1.8.9',
+    keepAlive: true,
+    timeout: 60000,
+    connectTimeout: 120000
+  });
 
-    bot.on('end', async reason => {
-      console.log('🔌 Conexión cerrada:', reason);
+  bot.on('error', err => log(username, '❌ Error:', err.message));
+  bot.on('end', reason => log(username, '🔌 Desconectado:', reason));
 
-      if (typeof reason === 'string' && reason.includes('socketClosed')) {
-        console.log('⏳ Esperando 5 minutos para reset...');
-        await delay(5 * 60 * 1000);
-        process.exit(EXIT_CODES.ERROR_RESET);
-      }
-    });
+  new InventoryListener(bot);
+  new ContainerInteractor(bot, 150, 350);
+  new ScoreboardListener(bot);
 
-    invListener = new InventoryListener(bot);
-    interactor = new ContainerInteractor(bot, 150, 350);
-    scoreboard = new ScoreboardListener(bot);
+  const chat = new ChatListener(bot, {
+    palabras: ['Connecting to', 'MiniEspe'],
+    tipos: ['sistema'],
+    excluirPalabras: ['APPEARING OFFLINE', '✎']
+  });
 
-    chat = new ChatListener(bot, {
-      palabras: ['Connecting to', 'MiniEspe'],
-      tipos: ['sistema'],
-      excluirPalabras: ['APPEARING OFFLINE', '✎']
-    });
+  chat.onceMensajeContiene(/You have 60 seconds|restart|Sending packets too fast|Limbo|maximum of/i, registro => {
+    log(username, '⚠️ Mensaje crítico:', registro.mensaje);
+    bot.end();
+    process.exit(10);
+  });
 
-    chat.onceMensajeContiene(
-      /You have 60 seconds to warp out|You can't use this when the server is about to restart|Sending packets too fast|kick occurred in your connection, so you were put in the SkyBlock lobby|were spawned in Limbo|You reached your maximum of/i,
-      registro => {
-        console.log('⚠️ Mensaje crítico:', registro.mensaje);
-        process.exit(EXIT_CODES.MENSAJE_CRITICO);
-      }
-    );
+  bot.once('duplicateBoughtReset', ({ nombre }) => {
+    log(username, '❌ Dupe detectado:', nombre);
+    bot.end();
+    process.exit(12);
+  });
 
-    bot.once('duplicateBoughtReset', ({ nombre }) => {
-      console.log(`❌ Dupe detectado: ${nombre}`);
-      process.exit(EXIT_CODES.DUPE_RESET);
-    });
+  bot.once('spawn', async () => {
+    try {
+      const estado = JSON.parse(fs.readFileSync(estadoPath));
+      estado.finished = false;
+      fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
 
-    bot.once('spawn', async () => {
-      try {
-        const estado = fs.existsSync(estadoPath)
-          ? JSON.parse(fs.readFileSync(estadoPath))
-          : {};
+      // Tomar el puerto del launcher
+      const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
+      const panel = new Panel(bot, { username, port: panelPort });
 
-        estado.finished = false;
-        fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
+      await delay(4000);
+      chat.enviar('/skyblock');
+      await delay(5000);
+      chat.enviar('/warp garden');
+      await delay(5000);
 
-        panel = new Panel(bot);
-        await delay(4000);
-        chat.enviar("/skyblock");
-        await delay(5000);
-        chat.enviar("/warp garden");
-        await delay(5000);
+      log(username, '✅ Conectado');
+      console.log("READY"); // Señal para el launcher
+      panel.manualReset();
 
-        console.log('✅ Bot conectado correctamente');
-        await delay(1500);
-        panel.manualReset();
-
-        resolve(bot);
-      } catch (err) {
-        reject(err);
-      }
-    });
+    } catch (e) {
+      log(username, '❌ Error en spawn:', e);
+      process.exit(11);
+    }
   });
 }
 
-/* ---------- AUTO START ---------- */
+// Ejecutar automáticamente si se llama desde la línea de comandos
 if (require.main === module) {
-  startBot().catch(() => process.exit(EXIT_CODES.FATAL));
+  const args = process.argv.slice(2);
+  let username = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--account" && i + 1 < args.length) {
+      username = args[i + 1];
+      break;
+    }
+  }
+
+  startBot(username).catch(err => {
+    console.error("❌ Error crítico:", err);
+    process.exit(11);
+  });
 }
 
-/* ---------- EXPORT (opcional) ---------- */
-module.exports = { startBot };
+module.exports = { startBot, log };

@@ -5,6 +5,7 @@ const SkyBlockItem = require('./SkyBlockItem');
 const InventoryListener = require('./InventoryListener');
 const fs = require('fs');
 const path = require('path');
+const { text } = require('stream/consumers');
 
 const basePath = process.pkg ? path.dirname(process.execPath) : __dirname;
 const estadoPath = path.join(basePath, 'estado.json');
@@ -24,6 +25,7 @@ class ItemRequester extends EventEmitter {
     this.maxDelay = 400;
     this.finishedCollecting = false;
 
+    
 
     this.container = new ContainerInteractor(bot);
     this.skyBlock = new SkyBlockItem();
@@ -162,7 +164,17 @@ class ItemRequester extends EventEmitter {
 
       await this.esperar(1000);
     
-      const items = this.containerListener.obtenerItemsValidos(); // todos los slots válidos
+      // Obtener todos los items del contenedor
+      const todosItems = this.containerListener.obtenerItemsValidos();
+
+      // Filtrar solo los que están en la whitelist del usuario del panel
+      const items = todosItems.filter(item => {
+        const nombreLimpio = this.limpiarNombre(item.nombreCustom); // usar tu método
+        return this.panel.whitelist[nombreLimpio]; // o this.whitelist si estás en Panel
+      });
+
+      console.log(items);
+
       const itemsINV = this.containerListener.obtenerItemsValidosInventario();
       const coincidencias = this.containerListener.compararItemsPorNombre(items, itemsINV);
       this.container.cerrarContenedor();
@@ -390,8 +402,9 @@ class ItemRequester extends EventEmitter {
     const regexComplete = new RegExp(`your buy order.*${nombre}.*was filled!`, 'i');
 
     this.panel.on('CHAT_MESSAGE', async (msg) => {
-      const texto = msg.mensaje;
+    const texto = msg.mensaje;
 
+    if (texto.includes("co-op")) return;
     // SETUP
     if (regexSetup.test(texto)) {
       const match = texto.match(/for\s*([\d,.]+)\s*coins/i);

@@ -1,11 +1,21 @@
 {
-  "Tropical Fish": true,
-  "Pufferfish": true,
-  "Raw Salmon": true,
-  "Mangrove Log": true,
-  "Mithril": true,
-  "Red Mushroom": true,
-  "Brown Mushroom": true,
-  "Red Sand": true,
-  "Fig Log": true
+  "nuwifer": {
+    "Mangrove Log": true,
+    "Red Mushroom": true,
+    "Brown Mushroom": true,
+    "Fig Log": true,
+    "Enchanted Feather": true,
+    "Enchanted Wool": true,
+    "Hunk of Ice": true
+  },
+  "MiniEspe": {
+    "Tropical Fish": true,
+    "Pufferfish": true,
+    "Raw Salmon": true,
+    "Mithril": true,
+    "Red Sand": true,
+    "Wheat": true,
+    "Tender Wood": true,
+    "Seeds": true
+  }
 }

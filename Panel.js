@@ -13,8 +13,14 @@ const ItemRequester = require('./ItemRequester');
 const SkyBlockItem = require('./SkyBlockItem');
 
 class Panel extends EventEmitter{
-  constructor(bot, port = 3000) {
-    super();
+  constructor(bot, options = {}) {
+  super();
+  const { username = 'unknown', port } = options;
+  this.username = username;
+  this.port = port || 3000;
+
+
+
     this.bot = bot;
     this.invListener = new InventoryListener(bot);
     this.container = new ContainerInteractor(bot);
@@ -27,7 +33,7 @@ class Panel extends EventEmitter{
     this.ultimoTiempo = {};  
     this.ultimosComprados = [];
     this.chat = new ChatListener(bot, {
-        excluirPalabras: ['APPEARING OFFLINE', '✎'],
+        excluirPalabras: ['APPEARING OFFLINE', '✎', 'Claimed', 'Claiming order...'],
         tipos: ['chat', 'sistema'],
         callback: msg => {
           this.io?.emit('chatMensaje', msg);
@@ -70,9 +76,10 @@ class Panel extends EventEmitter{
     this.app.use(express.static(path.join(__dirname, 'public')));
     this.app.get('/viewer-port', (req, res) => res.json({ port: this.viewerPort }));
 
-    this.server.listen(port, () => {
-        console.log(`🌐 Panel web en http://localhost:${port}`);
-        const url = `http://localhost:${port}`;
+    this.server.listen(this.port, () => {
+        console.log(`🌐 Panel [${this.username}] → http://localhost:${this.port}`);
+        const url = `http://localhost:${this.port}`;
+
 
         // Abrir web solo si no estaba abierta
         if (!webYaAbierta) {
@@ -85,28 +92,37 @@ class Panel extends EventEmitter{
         }
     });
 
-      // ======================== WHITELIST GLOBAL ========================
-      const isPkg = typeof process.pkg !== "undefined";
-      const basePath = isPkg ? path.dirname(process.execPath) : __dirname;
+// ======================== WHITELIST POR USUARIO ========================
+    const isPkg = typeof process.pkg !== "undefined";
+    const basePath = isPkg ? path.dirname(process.execPath) : __dirname;
 
-      this.whitelistPath = path.join(basePath, "whitelist.json");
-      this.whitelist = {};
+    this.whitelistPath = path.join(basePath, "whitelist.json");
 
-      // Crear whitelist si no existe
-      if (!fs.existsSync(this.whitelistPath)) {
-          fs.writeFileSync(this.whitelistPath, JSON.stringify({}, null, 2));
-          console.log("📄 whitelist.json creado en:", this.whitelistPath);
-      }
+    // Crear archivo si no existe
+    if (!fs.existsSync(this.whitelistPath)) {
+      fs.writeFileSync(this.whitelistPath, JSON.stringify({}, null, 2));
+      console.log("📄 whitelist.json creado");
+    }
 
-      // Cargar whitelist
-      try {
-          const data = fs.readFileSync(this.whitelistPath, "utf8");
-          this.whitelist = JSON.parse(data);
-          console.log("📄 Whitelist cargado:", this.whitelist);
-      } catch (err) {
-          console.error("⚠️ Error leyendo whitelist.json, usando whitelist vacía");
-          this.whitelist = {};
-      }
+    // Leer whitelist completa
+    let fullWhitelist = {};
+    try {
+      fullWhitelist = JSON.parse(fs.readFileSync(this.whitelistPath, "utf8"));
+    } catch {
+      fullWhitelist = {};
+    }
+
+    // Crear entrada para el usuario si no existe
+    if (!fullWhitelist[this.username]) {
+      fullWhitelist[this.username] = {};
+      fs.writeFileSync(this.whitelistPath, JSON.stringify(fullWhitelist, null, 2));
+      console.log(`➕ Whitelist creada para ${this.username}`);
+    }
+
+    // SOLO la whitelist del usuario actual
+    this.fullWhitelist = fullWhitelist;
+    this.whitelist = fullWhitelist[this.username];
+
 
       this.setupSockets();
 
@@ -448,12 +464,20 @@ class Panel extends EventEmitter{
 
     // Actualización desde web
     socket.on("actualizarWhitelist", (newWL) => {
-        this.whitelist = newWL;
-        fs.writeFileSync(this.whitelistPath, JSON.stringify(newWL, null, 2));
-        console.log("Whitelist actualizado:", newWL);
+      this.whitelist = newWL;
 
-        this.io.emit("whitelistData", newWL);
+      // actualizar solo la sección del usuario
+      this.fullWhitelist[this.username] = newWL;
+
+      fs.writeFileSync(
+        this.whitelistPath,
+        JSON.stringify(this.fullWhitelist, null, 2)
+      );
+
+      console.log(`📄 Whitelist actualizada para ${this.username}`);
+      this.io.emit("whitelistData", newWL);
     });
+
 
 
     socket.on('solicitarNPCFlips', async () => {
