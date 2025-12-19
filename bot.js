@@ -50,8 +50,29 @@ async function startBot(username) {
     connectTimeout: 120000
   });
 
-  bot.on('error', err => log(username, '❌ Error:', err.message));
-  bot.on('end', reason => log(username, '🔌 Desconectado:', reason));
+  bot.on('kicked', (reason, loggedIn) => {
+  console.error(`[${username}] KICKED!`, reason, loggedIn);
+});
+
+bot.on('end', (reason) => {
+  console.error(`[${username}] END!`, reason);
+});
+
+bot.on('error', (err) => {
+  console.error(`[${username}] ERROR!`, err.stack || err);
+});
+
+bot.on('login', () => {
+  console.log(`[${username}] LOGIN OK`);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err.stack || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION]', reason.stack || reason, promise);
+});
 
   new InventoryListener(bot);
   let itemClicker = new ContainerInteractor(bot, 150, 350);
