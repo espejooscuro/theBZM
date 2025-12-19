@@ -67,13 +67,18 @@ class BotController {
       console.log(`🚀 Lanzando bot ${this.username}`);
 
       this.process = spawn(
-        botPath,
-        ["--account", this.username],
-        {
-          stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env, BOT_PORT: this.port }
+      botPath,
+      ["--account", this.username],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          BOT_PORT: this.port,
+          NODE_OPTIONS: "--dns-result-order=ipv4first"
         }
-      );
+      }
+    );
+
 
       const color = getUserColor(this.username);
 
