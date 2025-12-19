@@ -435,7 +435,7 @@ class ItemRequester extends EventEmitter {
 
     // GOODS TO CLAIM
     if (/You have goods to claim on this order!/i.test(texto)) {
-      await this.esperar(1000);
+      await this.esperar(200);
       this.finishedCollecting = false;
     }
 
@@ -603,7 +603,16 @@ while (!this.finishedCollecting) {
         }
       }
 
-
+        await this.container.cerrarContenedor();
+        await this.esperar(1000);
+        this.emit('sendCMD', { cmd: "/managebazaarorders" });
+        await this.esperar(1000);
+        if (this.containerListener.existeItemEnContenedor({ nombreCustom: buyOrderName, tipo: "contenedor" })){
+            //console.log(`⚠️No se ha encontrado el item. Muy probablemente ya haya sido procesado`);
+              this.finishedCollecting = false;
+              await this.esperar(1200);
+              console.log("Siguen habiendo objetos para reclamar...")
+          }
       //console.log(`🔹 [LOG] Espera final de 400ms antes de cerrar contenedor`);
       await this.esperar(1200);
       await this.container.cerrarContenedor();

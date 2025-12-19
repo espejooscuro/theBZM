@@ -3,25 +3,21 @@
   "version": "1.0.0",
   "description": "BZM bot con launcher watchdog",
   "private": true,
-
   "scripts": {
     "start": "node launcher.js",
-
     "build:win": "pkg bot.js --targets node18-win-x64 --output dist/bzm-bot.exe && pkg launcher.js --targets node18-win-x64 --output dist/bzm.exe",
     "build:pi32": "pkg bot.js --targets node18-linux-armv7 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-armv7 --output dist/bzm",
     "build:pi64": "pkg bot.js --targets node18-linux-arm64 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-arm64 --output dist/bzm"
-
   },
-
   "dependencies": {
     "bytenode": "^1.5.7",
+    "chalk": "^4.1.2",
     "express": "^5.1.0",
     "mineflayer": "^4.33.0",
     "node-fetch": "^2.7.0",
     "socket.io": "^4.8.1",
     "windows-shortcuts": "^0.1.6"
   },
-
   "pkg": {
     "assets": [
       "public/**/*",

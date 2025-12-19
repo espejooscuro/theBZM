@@ -30,6 +30,28 @@ if (!fs.existsSync(cuentasPath)) {
 const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
+// Colores ANSI manuales
+const colors = {
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  reset: '\x1b[0m'
+};
+const colorList = ['red','green','yellow','blue','magenta','cyan','white'];
+const userColors = {};
+
+function getUserColor(username) {
+  if (!userColors[username]) {
+    const available = colorList.filter(c => !Object.values(userColors).includes(c));
+    userColors[username] = available[0] || 'white';
+  }
+  return userColors[username];
+}
+
 class BotController {
   constructor(username, port) {
     this.username = username;
@@ -43,27 +65,29 @@ class BotController {
       this.process = spawn(botPath, ["--account", this.username], {
         stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, BOT_PORT: this.port },
-        detached: process.platform !== "win32" // Linux/macOS: proceso independiente
+        detached: process.platform !== "win32"
       });
 
-      // Desacoplar el hijo en Linux/macOS
       if (process.platform !== "win32") {
         this.process.unref();
       }
 
+      // Colorear logs por usuario
       this.process.stdout.on("data", data => {
         const msg = data.toString();
-        process.stdout.write(`[${this.username}] ${msg}`);
+        const color = getUserColor(this.username);
+        process.stdout.write(`${colors[color]}[${this.username}]${colors.reset} ${msg}`);
         if (msg.includes("READY")) resolve();
       });
 
-      this.process.stderr.on("data", data =>
-        process.stderr.write(`[${this.username} ERROR] ${data}`)
-      );
+      this.process.stderr.on("data", data => {
+        const color = getUserColor(this.username);
+        process.stderr.write(`${colors[color]}[${this.username} ERROR]${colors.reset} ${data}`);
+      });
 
       this.process.on("exit", code => {
         console.log(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
-        if ([10, 11, 12].includes(code)) {
+        if ([10,11,12].includes(code)) {
           console.log(`🔄 [${this.username}] Reinicio por código ${code}`);
           setTimeout(() => this.start(), 5000);
         }
@@ -90,16 +114,14 @@ class BotController {
 
   initScheduler() {
     setInterval(async () => {
-      if (!this.resetLongActive) {
-        await this.resetBot(1);
-      }
+      if (!this.resetLongActive) await this.resetBot(1);
     }, 90 * 60 * 1000);
 
     setInterval(async () => {
       this.resetLongActive = true;
-      await this.resetBot(8 * 60);
+      await this.resetBot(8*60);
       this.resetLongActive = false;
-    }, 16 * 60 * 60 * 1000);
+    }, 16*60*60*1000);
   }
 }
 
@@ -110,9 +132,8 @@ class BotController {
   for (let i = 0; i < cuentas.length; i++) {
     const { username } = cuentas[i];
     const controller = new BotController(username, startPort + i);
-    await controller.start(); // puedes mantener await o lanzar en paralelo sin await
+    await controller.start();
     bots.push(controller);
-
     console.log(`🚀 Bot ${username} iniciado, esperando 20s para el siguiente...`);
     await delay(20000);
   }
