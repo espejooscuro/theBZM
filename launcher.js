@@ -1,120 +1,82 @@
-const fs = require("fs");
+const { spawn } = require("child_process");
 const path = require("path");
-const botModule = require("./bot");
+const fs = require("fs");
+
+console.log("🚀 Lanzando BZM Launcher (ejecutable principal). No ejecutes el bot manualmente.");
 
 const isPkg = typeof process.pkg !== "undefined";
 const basePath = isPkg ? path.dirname(process.execPath) : __dirname;
-const estadoPath = path.join(basePath, "estado.json");
+const botPath = path.join(basePath, process.platform === "win32" ? "bzm-bot.exe" : "bzm-bot");
 
-let botInstance = null;
-let shortTimer = null;
-let longTimer = null;
-let isRestarting = false; // evita reinicios simultáneos
+const EXIT_CODES = {
+  MENSAJE_CRITICO: 10,
+  ERROR_RESET: 11,
+  DUPE_RESET: 12
+};
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+let botProcess = null;
+let isRestarting = false;
+let nextTimeout = null;
 
-/* ---------- constantes de timer ---------- */
 const TEST_SHORT = 30 * 1000;
 const TEST_LONG  = 60 * 1000;
 const PROD_SHORT = 90 * 60 * 1000;
 const PROD_LONG  = 16 * 60 * 60 * 1000;
 
-/* ---------- estado ---------- */
-function cargarEstado() {
-  let estado = {};
-  if (fs.existsSync(estadoPath)) {
-    try { estado = JSON.parse(fs.readFileSync(estadoPath, "utf8")); } catch {}
-  }
-  estado.finished = false;
-  fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
-  return estado;
-}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function guardarEstado(estado) {
-  fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
-}
-
-/* ---------- bot ---------- */
-async function startBot() {
+function startBot() {
   if (isRestarting) return;
   isRestarting = true;
 
-  if (botInstance) {
-    console.log("Bot ya corriendo, deteniéndolo antes de reiniciar...");
-    await stopBot();
-    await delay(5000); // espera mínima de 5 segundos
+  botProcess = spawn(botPath, [], { stdio: "inherit" });
+
+  botProcess.on("exit", async code => {
+    isRestarting = false;
+
+    if (
+      code === EXIT_CODES.MENSAJE_CRITICO ||
+      code === EXIT_CODES.ERROR_RESET ||
+      code === EXIT_CODES.DUPE_RESET
+    ) {
+      console.log("🔄 Reiniciando bot por evento crítico...");
+      await delay(5000);
+      startBot();
+    }
+  });
+}
+
+function killBot() {
+  if (botProcess) {
+    botProcess.kill("SIGKILL");
+    botProcess = null;
   }
-
-  console.log("Iniciando bot…");
-  botInstance = await botModule.startBot();
-
-  botInstance.on("mensajeCritico", async () => {
-    console.log("Evento crítico → reinicio bot");
-    await startBot(); // reinicia solo el bot
-  });
-
-  botInstance.on("errorReset", async () => {
-    console.log("Error detectado en bot.js → reinicio bot");
-    await delay(10000);
-    await startBot(); // reinicia solo el bot
-  });
-
-  botInstance.on("DupeReset", async () => {
-    console.log("DupeReset → reinicio bot");
-    await startBot(); // reinicia solo el bot
-  });
-
-  isRestarting = false;
 }
 
-async function stopBot() {
-  if (!botInstance) return;
-
-  botInstance.removeAllListeners();
-  await botModule.stopBot();
-  botInstance = null;
-  console.log("Bot detenido completamente.");
-}
-
-/* ---------- timers ---------- */
-function programarReinicios() {
-  const estado = cargarEstado();
-  const now = Date.now();
-  const isTest = process.env.TEST_TIMER === "1"; // solo si TEST_TIMER="1"
-
-
-  clearTimeout(shortTimer);
-  clearTimeout(longTimer);
-
+function programarReinicio() {
+  const isTest = process.env.TEST_TIMER === "1";
   const shortInterval = isTest ? TEST_SHORT : PROD_SHORT;
   const longInterval  = isTest ? TEST_LONG  : PROD_LONG;
 
-  estado.nextShortRestart = now + shortInterval;
-  estado.nextLongRestart  = now + longInterval;
-  guardarEstado(estado);
+  const now = Date.now();
 
-  console.log("Reinicio corto en", shortInterval / 1000, "segundos (modo " + (isTest ? "TEST" : "PROD") + ")");
-  console.log("Reinicio largo en", longInterval / 1000, "segundos (modo " + (isTest ? "TEST" : "PROD") + ")");
+  // Elegimos cuál intervalo usar: largo prioriza sobre corto
+  const nextInterval = longInterval < shortInterval ? longInterval : shortInterval;
 
-  shortTimer = setTimeout(() => {
-  if (!isRestarting) startBot();
-}, shortInterval);
-
-longTimer = setTimeout(() => {
-  if (!isRestarting) startBot();
-}, longInterval);
-
+  nextTimeout = setTimeout(async () => {
+    console.log("⏰ Reiniciando bot por temporizador...");
+    killBot();
+    startBot();
+    programarReinicio(); // reprograma el siguiente reinicio
+  }, nextInterval);
 }
 
-/* ---------- signals ---------- */
-process.on("SIGINT", async () => {
-  console.log("Cerrando launcher…");
-  await stopBot();
+process.on("SIGINT", () => {
+  clearTimeout(nextTimeout);
+  killBot();
   process.exit(0);
 });
 
-/* ---------- main ---------- */
-(async () => {
-  await startBot();
-  programarReinicios();
-})();
+// inicio
+startBot();
+programarReinicio();

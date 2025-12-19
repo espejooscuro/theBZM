@@ -1,15 +1,18 @@
 {
   "name": "bzm",
   "version": "1.0.0",
-  "description": "BZM bot compatible con Windows y Raspberry Pi",
-  "main": "launcher.js",
-  "bin": "launcher.js",
+  "description": "BZM bot con launcher watchdog",
+  "private": true,
+
   "scripts": {
     "start": "node launcher.js",
-    "build-win": "pkg . --targets node18-win-x64 --output dist/bzm.exe",
-    "build-pi32": "pkg . --targets node18-linux-armv7 --output dist/bzm",
-    "build-pi64": "pkg . --targets node18-linux-arm64 --output dist/bzm"
+
+    "build:win": "pkg bot.js --targets node18-win-x64 --output dist/bzm-bot.exe && pkg launcher.js --targets node18-win-x64 --output dist/bzm.exe",
+    "build:pi32": "pkg bot.js --targets node18-linux-armv7 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-armv7 --output dist/bzm",
+    "build:pi64": "pkg bot.js --targets node18-linux-arm64 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-arm64 --output dist/bzm"
+
   },
+
   "dependencies": {
     "bytenode": "^1.5.7",
     "express": "^5.1.0",
@@ -18,18 +21,16 @@
     "socket.io": "^4.8.1",
     "windows-shortcuts": "^0.1.6"
   },
+
   "pkg": {
     "assets": [
       "public/**/*",
       "estado.json",
       "node_modules/bytenode/**/*",
       "node_modules/windows-shortcuts/**/*",
-      "node_modules/mineflayer/**/*",
-      "node_modules/yggdrasil/**/*",
       "node_modules/iconv-lite/helpers/**/*.js"
     ],
     "scripts": [
-      "bot.js",
       "InventoryListener.js",
       "ContainerInteractor.js",
       "ScoreboardListener.js",
@@ -37,13 +38,7 @@
       "Panel.js",
       "ItemRequester.js",
       "SkyBlockItem.js",
-      "launcher.js",
       "node_modules/node-fetch/**/*"
-    ],
-    "targets": [
-      "node18-win-x64",
-      "node18-linux-armv7",
-      "node18-linux-arm64"
     ]
   }
 }

@@ -6,9 +6,19 @@ const ChatListener = require('./ChatListener');
 const Panel = require('./Panel');
 const fs = require('fs');
 const path = require('path');
+
 const basePath = process.pkg ? path.dirname(process.execPath) : __dirname;
 const estadoPath = path.join(basePath, 'estado.json');
 
+/* ---------- EXIT CODES ---------- */
+const EXIT_CODES = {
+  MENSAJE_CRITICO: 10,
+  ERROR_RESET: 11,
+  DUPE_RESET: 12,
+  FATAL: 1
+};
+
+/* ---------- estado ---------- */
 if (!fs.existsSync(estadoPath)) {
   fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
 }
@@ -24,8 +34,10 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/* ---------- BOT ---------- */
 async function startBot() {
   return new Promise((resolve, reject) => {
+
     bot = mineflayer.createBot({
       host: 'mc.hypixel.net',
       port: 25565,
@@ -37,55 +49,53 @@ async function startBot() {
     });
 
     bot.on('error', err => {
-      console.log('❌ Error de red:', err.message)
-      //bot.emit('errorReset');
-    })
+      console.log('❌ Error de red:', err.message);
+    });
 
     process.on('uncaughtException', err => {
-    console.log('⚠ Excepción no capturada, ignorada:', err.message)
+      console.log('⚠ Excepción no capturada:', err.message);
+      process.exit(EXIT_CODES.FATAL);
     });
 
     bot.on('end', async reason => {
-      console.log('🔌 Conexión cerrada:', reason)
+      console.log('🔌 Conexión cerrada:', reason);
 
       if (typeof reason === 'string' && reason.includes('socketClosed')) {
-        console.log('⏳ Esperando 5 minutos para reset...')
-        await delay(5 * 60 * 1000) // 5 minutos
-        bot.emit('errorReset')
+        console.log('⏳ Esperando 5 minutos para reset...');
+        await delay(5 * 60 * 1000);
+        process.exit(EXIT_CODES.ERROR_RESET);
       }
-    })
-
+    });
 
     invListener = new InventoryListener(bot);
     interactor = new ContainerInteractor(bot, 150, 350);
     scoreboard = new ScoreboardListener(bot);
+
     chat = new ChatListener(bot, {
       palabras: ['Connecting to', 'MiniEspe'],
       tipos: ['sistema'],
       excluirPalabras: ['APPEARING OFFLINE', '✎']
     });
 
-    // Emitir evento crítico
     chat.onceMensajeContiene(
       /You have 60 seconds to warp out|You can't use this when the server is about to restart|Sending packets too fast|kick occurred in your connection, so you were put in the SkyBlock lobby|were spawned in Limbo|You reached your maximum of/i,
-      (registro) => {
-        console.log('⚠️ Mensaje crítico detectado, solicitando reinicio del bot:', registro.mensaje);
-        bot.emit('mensajeCritico', registro); // aquí ya es el mismo bot  
+      registro => {
+        console.log('⚠️ Mensaje crítico:', registro.mensaje);
+        process.exit(EXIT_CODES.MENSAJE_CRITICO);
       }
     );
 
-    
     bot.once('duplicateBoughtReset', ({ nombre }) => {
-        console.log(`Cerrando programa... se detectaron 3 compras de: ${nombre}`);
-        bot.emit('DupeReset');
+      console.log(`❌ Dupe detectado: ${nombre}`);
+      process.exit(EXIT_CODES.DUPE_RESET);
     });
-
 
     bot.once('spawn', async () => {
       try {
         const estado = fs.existsSync(estadoPath)
           ? JSON.parse(fs.readFileSync(estadoPath))
           : {};
+
         estado.finished = false;
         fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
 
@@ -95,11 +105,12 @@ async function startBot() {
         await delay(5000);
         chat.enviar("/warp garden");
         await delay(5000);
-        console.log('✅ ¡Bot conectado con tu cuenta premium!');
+
+        console.log('✅ Bot conectado correctamente');
         await delay(1500);
         panel.manualReset();
 
-        resolve(bot); // resolvemos la promesa con el bot real
+        resolve(bot);
       } catch (err) {
         reject(err);
       }
@@ -107,56 +118,10 @@ async function startBot() {
   });
 }
 
-async function stopBot() {
-  if (!bot) return;
-
-  try {
-    // 🔹 Marcar estado como finalizado
-    const estado = fs.existsSync(estadoPath)
-      ? JSON.parse(fs.readFileSync(estadoPath))
-      : {};
-    estado.finished = true;
-    fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
-  } catch (err) {
-    console.error("Error escribiendo estado.json:", err);
-  }
-
-  try {
-    // 🔹 Limpiar listeners del ChatListener
-    chat?.removeListeners?.();
-    
-    // 🔹 Limpiar listeners del ScoreboardListener, InventoryListener y ContainerInteractor
-    scoreboard?.removeAll?.();
-    invListener?.removeAll?.();
-    interactor?.removeAll?.();
-
-    // 🔹 Limpiar panel
-    panel?.requesterQueue?.forEach(task => task.requester?.destroy?.());
-    await panel?.destroy?.();
-
-    // 🔹 Limpiar listeners del bot
-    bot.removeAllListeners();
-
-    // 🔹 Cerrar conexión del bot
-    bot.removeAllListeners();
-    bot._client?.removeAllListeners?.();
-    await bot.quit();
-  } catch (e) {
-    console.error('Error cerrando el bot:', e);
-  }
-
-  // 🔹 Limpiar referencias para liberar memoria
-  bot = null;
-  invListener = null;
-  interactor = null;
-  scoreboard = null;
-  chat = null;
-  panel = null;
-
+/* ---------- AUTO START ---------- */
+if (require.main === module) {
+  startBot().catch(() => process.exit(EXIT_CODES.FATAL));
 }
 
-
-
-module.exports = { startBot, stopBot };
-
-//undergoing maintenance
+/* ---------- EXPORT (opcional) ---------- */
+module.exports = { startBot };
