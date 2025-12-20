@@ -1,6 +1,7 @@
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const { logmc } = require("./logger");
 
 console.log("🚀 BZM Multi Launcher");
 
@@ -12,7 +13,7 @@ const botPath = process.platform === "win32"
 const cuentasPath = path.join(basePath, "cuentas.json");
 if (!fs.existsSync(cuentasPath)) {
   fs.writeFileSync(cuentasPath, JSON.stringify([], null, 2));
-  console.log("📝 cuentas.json creado. Añade tus cuentas y reinicia.");
+  logmc("📝 cuentas.json creado. Añade tus cuentas y reinicia");
   process.exit(0);
 }
 
@@ -20,10 +21,11 @@ const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
 class BotController {
-  constructor(username, port, proxy) {
+  constructor({ username, proxy, token }, port) {
     this.username = username;
+    this.proxy = proxy || null;
+    this.token = token || null;
     this.port = port;
-    this.proxy = proxy;
     this.process = null;
     this.resetLongActive = false;
     this.schedulerStarted = false;
@@ -31,18 +33,19 @@ class BotController {
 
   start() {
     return new Promise(resolve => {
-      console.log(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
+      logmc(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
 
-      this.process = spawn(botPath, ["--account", this.username], {
+      this.process = spawn(botPath, [], {
   stdio: ["ignore", "pipe", "pipe"],
   env: {
     ...process.env,
-    BOT_PORT: this.port, // cada bot con un puerto distinto
-    SOCKS_PROXY: this.proxy || ""
+    BOT_USERNAME: this.username,
+    BOT_PORT: String(this.port),
+    ...(this.proxy ? { BOT_PROXY: this.proxy } : {}),     // solo si hay proxy
+    ...(this.token ? { BOT_TOKEN: JSON.stringify(this.token) } : {})
   },
   detached: process.platform !== "win32"
 });
-
 
 
       if (process.platform !== "win32") this.process.unref();
@@ -50,8 +53,6 @@ class BotController {
       this.process.stdout.on("data", data => {
         const msg = data.toString();
         process.stdout.write(`[${this.username}] ${msg}`);
-
-        // Bot considerado estable
         if (msg.includes("Welcome to Hypixel SkyBlock!")) {
           resolve();
         }
@@ -62,9 +63,9 @@ class BotController {
       );
 
       this.process.on("exit", code => {
-        console.log(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
+        logmc(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
         if ([10, 11, 12].includes(code)) {
-          console.log(`🔄 [${this.username}] Reinicio por código ${code}`);
+          logmc(`🔄 [${this.username}] Reinicio por código ${code}`);
           setTimeout(() => this.start(), 5000);
         }
       });
@@ -84,7 +85,7 @@ class BotController {
   }
 
   async resetBot(waitMinutes = 1) {
-    console.log(`♻️ [${this.username}] Reset automático iniciado`);
+    logmc(`♻️ [${this.username}] Reset automático iniciado`);
     this.kill();
     await delay(waitMinutes * 60 * 1000);
     await this.start();
@@ -97,7 +98,7 @@ class BotController {
 
     setInterval(async () => {
       this.resetLongActive = true;
-      await this.resetBot(8 * 60);
+      await this.resetBot(8 * 60); // reset largo
       this.resetLongActive = false;
     }, 16 * 60 * 60 * 1000);
   }
@@ -105,17 +106,20 @@ class BotController {
 
 (async () => {
   const bots = [];
-  const startPort = 3000;
+  let startPort = 3000;
 
   for (let i = 0; i < cuentas.length; i++) {
-    const { username, proxy } = cuentas[i];
-    const controller = new BotController(username, undefined, proxy);
-
+    const cuenta = cuentas[i];
+    const controller = new BotController({
+      username: cuenta.username,
+      proxy: cuenta.proxy || null,
+      token: cuenta.token || null
+    }, startPort + i);
 
     await controller.start();
     bots.push(controller);
 
-    console.log(`⏳ Esperando 10s antes del siguiente bot...`);
+    logmc(`⏳ Esperando 10s antes del siguiente bot...`);
     await delay(10 * 1000);
   }
 

@@ -1,8 +1,5 @@
-const SkyBlockItem = require('./SkyBlockItem');
-const sb = new SkyBlockItem();
+const { startBot } = require('./bot.js');
 
-(async () => {
-  const top10 = await sb.obtenerTop30NPCFlips();
-  console.log(top10);
-})();
-
+startBot('MiniEspe')
+  .then(bot => console.log('Bot iniciado correctamente'))
+  .catch(err => console.error('Error al iniciar bot:', err));
