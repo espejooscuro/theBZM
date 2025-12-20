@@ -44,6 +44,7 @@ async function createBotWithProxy(username, proxyUrl) {
     log(username, `✅ Conectando vía proxy ${host}:${port}`);
   }
 
+  log(username, `✅ Conectando`);
   return mineflayer.createBot({
     username,
     host: 'mc.hypixel.net',
