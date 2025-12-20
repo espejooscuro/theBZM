@@ -144,7 +144,7 @@ async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_
 
   // Listeners
   new InventoryListener(bot);
-  new ContainerInteractor(bot, 150, 350);
+  let itemClicker = new ContainerInteractor(bot, 150, 350);
   new ScoreboardListener(bot);
 
   const chat = new ChatListener(bot, {
