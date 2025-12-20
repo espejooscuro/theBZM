@@ -4,6 +4,7 @@ const fs = require("fs");
 
 console.log("🚀 BZM Multi Launcher");
 
+// Paths
 const basePath = path.dirname(process.execPath);
 const botPath = process.platform === "win32"
   ? path.join(basePath, "bzm-bot.exe")
@@ -19,7 +20,8 @@ if (!fs.existsSync(cuentasPath)) {
 const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-const activeAccounts = new Set(); // Evita duplicados
+// Bloquea cuentas activas para evitar duplicados
+const activeAccounts = new Set();
 
 class BotController {
   constructor(username, port, proxy) {
@@ -27,7 +29,7 @@ class BotController {
     this.port = port;
     this.proxy = proxy;
     this.process = null;
-    this.running = false;      // Bloquea múltiples starts
+    this.running = false;
     this.resetInProgress = false;
   }
 
@@ -45,7 +47,11 @@ class BotController {
 
     this.process = spawn(botPath, ["--account", this.username], {
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, BOT_PORT: this.port, SOCKS_PROXY: this.proxy || "" },
+      env: {
+        ...process.env,
+        BOT_PORT: this.port,
+        SOCKS_PROXY: this.proxy || ""
+      },
       detached: false
     });
 
@@ -84,12 +90,15 @@ class BotController {
 
   for (let i = 0; i < cuentas.length; i++) {
     const { username, proxy } = cuentas[i];
-    const controller = new BotController(username, startPort + i, proxy);
+
+    // Asignamos un puerto único para cada bot
+    const botPort = startPort + i;
+    const controller = new BotController(username, botPort, proxy);
     await controller.start();
     bots.push(controller);
 
-    console.log(`🚀 Bot ${username} iniciado, esperando 30s para el siguiente...`);
-    await delay(30 * 1000);
+    console.log(`🚀 Bot ${username} iniciado en puerto ${botPort}, esperando 30s para el siguiente...`);
+    await delay(30 * 1000); // Retardo seguro entre bots
   }
 
   process.on("SIGINT", () => {
