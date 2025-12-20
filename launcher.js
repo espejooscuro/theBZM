@@ -109,7 +109,8 @@ class BotController {
 
   for (let i = 0; i < cuentas.length; i++) {
     const { username, proxy } = cuentas[i];
-    const controller = new BotController(username, startPort + i, proxy);
+    const controller = new BotController(username, undefined, proxy);
+
 
     await controller.start();
     bots.push(controller);

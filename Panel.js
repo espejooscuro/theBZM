@@ -77,8 +77,9 @@ class Panel extends EventEmitter{
     this.app.get('/viewer-port', (req, res) => res.json({ port: this.viewerPort }));
 
     this.server.listen(this.port, () => {
-      console.log(`🌐 Panel [${this.username}] → http://localhost:${this.server.address().port}`);
-      const url = `http://localhost:${this.server.address().port}`;
+      const actualPort = this.server.address().port;
+      console.log(`🌐 Panel [${this.username}] → http://localhost:${actualPort}`);
+      const url = `http://localhost:${actualPort}`;
       
       // Abrir web solo si no estaba abierta
       if (!webYaAbierta) {
