@@ -61,7 +61,6 @@ class BotController {
 
         // Mensajes críticos para reiniciar
         const criticalPatterns = [
-          /restart/i,
           /Limbo/i,
           /Sending packets too fast/i,
           /server will restart soon/i,
@@ -106,10 +105,10 @@ class BotController {
   // Delay aleatorio entre 30s y 3min antes de reiniciar
   const randomDelay = 30 * 1000 + Math.random() * (180 * 1000 - 30 * 1000);
   console.log(`⏳ Esperando ${Math.round(randomDelay / 1000)}s antes de resetear bot ${this.username}...`);
-  await delay(randomDelay);
-
+  
   console.log(`♻️ [${this.username}] Reset automático iniciado`);
   this.kill();
+  await delay(randomDelay);
   await this.start(); // quitamos waitMinutes
 }
 
