@@ -70,7 +70,7 @@ class BotController {
 
         if (criticalPatterns.some(rx => rx.test(msg)) && !this.pendingReset) {
           this.pendingReset = true;
-          logmc(`⚠️ [${this.username}] Mensaje crítico detectado, reiniciando bot...`);
+          console.log(`⚠️ [${this.username}] Mensaje crítico detectado, reiniciando bot...`);
           await this.resetBot();
           this.pendingReset = false;
         }
@@ -105,10 +105,10 @@ class BotController {
   async resetBot() {
   // Delay aleatorio entre 30s y 3min antes de reiniciar
   const randomDelay = 30 * 1000 + Math.random() * (180 * 1000 - 30 * 1000);
-  logmc(`⏳ Esperando ${Math.round(randomDelay / 1000)}s antes de resetear bot ${this.username}...`);
+  console.log(`⏳ Esperando ${Math.round(randomDelay / 1000)}s antes de resetear bot ${this.username}...`);
   await delay(randomDelay);
 
-  logmc(`♻️ [${this.username}] Reset automático iniciado`);
+  console.log(`♻️ [${this.username}] Reset automático iniciado`);
   this.kill();
   await this.start(); // quitamos waitMinutes
 }
@@ -117,14 +117,14 @@ initScheduler() {
   // Reset corto cada 1h30min
   setInterval(async () => {
     if (!this.resetLongActive) await this.resetBot();
-  }, 90 * 60 * 1000);
+  }, 5400000);
 
   // Reset largo cada 16h
   setInterval(async () => {
     this.resetLongActive = true;
     await this.resetBot(); // también sin waitMinutes
     this.resetLongActive = false;
-  }, 16 * 60 * 60 * 1000);
+  },57600000);
 }
 
 }
@@ -144,8 +144,8 @@ initScheduler() {
     await controller.start();
     bots.push(controller);
 
-    logmc(`⏳ Esperando 10s antes del siguiente bot...`);
-    await delay(10 * 1000);
+    console.log(`⏳ Esperando 10s antes del siguiente bot...`);
+    await delay(10000);
   }
 
   process.on("SIGINT", () => {

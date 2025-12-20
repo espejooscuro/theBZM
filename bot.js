@@ -176,8 +176,13 @@ async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_
       chat.enviar('/skyblock');
       await jitterDelay(5000);
       chat.enviar('/warp garden');
-      await jitterDelay(5000);
-
+      await jitterDelay(6000);
+      chat.enviar('/viewstash material');
+      await jitterDelay(2000);
+      itemClicker.click({ contiene: "Sell Stash Now", tipo: 'contenedor' });
+      await jitterDelay(2000);
+      itemClicker.click({ contiene: "Selling whole inventory", tipo: 'contenedor' });
+      await jitterDelay(2000);
       console.log("READY");
       panel.manualReset();
     } catch (e) {
