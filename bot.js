@@ -56,11 +56,11 @@ if (token && !token.uuid) {
 }
 
   const options = {
-    host: 'mc.hypixel.net',
-    port: 25565,
-    version: '1.8.9',
-    username,
-    stream: socket || undefined
+    "host": 'mc.hypixel.net',
+    "port": 25565,
+    "version": '1.8.9',
+    "username": username,
+    "stream": socket || undefined
   };
 
   if (token) {
