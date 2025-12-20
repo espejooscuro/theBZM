@@ -46,12 +46,14 @@ async function createBotWithProxy(username, proxyUrl = null, token = null) {
   }
 
   // Si solo tenemos accessToken, obtenemos uuid y username con tokenHelper
-  if (token && !token.uuid && !username) {
-    const tokenData = await getTokenInfo(token.accessToken);
-    if (!tokenData) throw new Error('No se pudo obtener info del token');
-    username = tokenData.username;
-    token.uuid = tokenData.uuid;
-  }
+  // Si tenemos token pero no viene username desde el token, obtenemos info del token
+if (token && !token.uuid) {
+  const tokenData = await getTokenInfo(token.accessToken);
+  if (!tokenData) throw new Error('No se pudo obtener info del token');
+  // Solo rellenamos uuid, no sobreescribimos el username si ya se pasó
+  if (!username) username = tokenData.username;
+  token.uuid = tokenData.uuid;
+}
 
   const options = {
     host: 'mc.hypixel.net',
