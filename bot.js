@@ -154,7 +154,7 @@ async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_
   });
 
   // Reinicio ante mensajes críticos
-  chat.onMensajeContiene(/restart|Limbo|packets too fast|server will restart soon|Game Update|server is too laggy/i, () => {
+  chat.onMensajeContiene(/Limbo|packets too fast|server will restart soon|Game Update|server is too laggy/i, () => {
     log(username, '⚠️ Mensaje crítico detectado, reiniciando bot...');
     bot.end();
   });
