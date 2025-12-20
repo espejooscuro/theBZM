@@ -15,6 +15,10 @@ function getEstadoPath(username) {
   return path.join(basePath, `estado_${username}.json`);
 }
 
+function getSessionPath(username) {
+  return path.join(basePath, `session_${username}.json`);
+}
+
 function ensureEstado(username) {
   const estadoPath = getEstadoPath(username);
   if (!fs.existsSync(estadoPath)) {
@@ -26,6 +30,20 @@ function ensureEstado(username) {
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 function log(username, ...args) { console.log(`[${username}]`, ...args); }
 function jitterDelay(ms) { return delay(ms + Math.random() * 1500); }
+
+// Guardar sesión en archivo
+function saveSession(username, session) {
+  fs.writeFileSync(getSessionPath(username), JSON.stringify(session, null, 2));
+}
+
+// Leer sesión guardada
+function loadSession(username) {
+  const sessionPath = getSessionPath(username);
+  if (fs.existsSync(sessionPath)) {
+    return JSON.parse(fs.readFileSync(sessionPath));
+  }
+  return null;
+}
 
 async function createBotWithProxy(username, proxyUrl = null, token = null) {
   let socket;
@@ -45,22 +63,20 @@ async function createBotWithProxy(username, proxyUrl = null, token = null) {
     log(username, `✅ Conectando vía proxy ${host}:${port}`);
   }
 
-  // Si solo tenemos accessToken, obtenemos uuid y username con tokenHelper
-  // Si tenemos token pero no viene username desde el token, obtenemos info del token
-if (token && !token.uuid) {
-  const tokenData = await getTokenInfo(token.accessToken);
-  if (!tokenData) throw new Error('No se pudo obtener info del token');
-  // Solo rellenamos uuid, no sobreescribimos el username si ya se pasó
-  if (!username) username = tokenData.username;
-  token.uuid = tokenData.uuid;
-}
+  // Si tenemos token pero no viene uuid, obtenemos info del token
+  if (token && !token.uuid) {
+    const tokenData = await getTokenInfo(token.accessToken);
+    if (!tokenData) throw new Error('No se pudo obtener info del token');
+    if (!username) username = tokenData.username;
+    token.uuid = tokenData.uuid;
+  }
 
   const options = {
-    "host": 'mc.hypixel.net',
-    "port": 25565,
-    "version": '1.8.9',
-    "username": username,
-    "stream": socket || undefined
+    host: 'mc.hypixel.net',
+    port: 25565,
+    version: '1.8.9',
+    username,
+    stream: socket || undefined
   };
 
   if (token) {
@@ -77,20 +93,40 @@ if (token && !token.uuid) {
 
   const bot = mineflayer.createBot(options);
   bot.username = username;
+
+  // Guardar token automáticamente si viene de Microsoft
+  if (!token) {
+    bot.once('login', () => {
+      const sessionToSave = {
+        accessToken: bot._client.session.accessToken,
+        clientToken: bot._client.session.clientToken,
+        uuid: bot._client.session.selectedProfile.id,
+        username: bot._client.session.selectedProfile.name
+      };
+      saveSession(username, sessionToSave);
+      log(username, '✅ Sesión guardada automáticamente');
+    });
+  }
+
   return bot;
 }
 
-// --- LECTURA DE VARIABLES DE ENTORNO (desde launcher) ---
+// --- LECTURA DE VARIABLES DE ENTORNO ---
 const BOT_USERNAME = process.env.BOT_USERNAME;
 const BOT_PROXY = process.env.BOT_PROXY || null;
-const BOT_TOKEN = process.env.BOT_TOKEN ? JSON.parse(process.env.BOT_TOKEN) : null;
+let BOT_TOKEN = process.env.BOT_TOKEN ? JSON.parse(process.env.BOT_TOKEN) : null;
 const PANEL_PORT = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
+
+// Si existe sesión guardada, usarla
+if (!BOT_TOKEN && BOT_USERNAME) {
+  const savedSession = loadSession(BOT_USERNAME);
+  if (savedSession) BOT_TOKEN = savedSession;
+}
 
 if (!BOT_USERNAME) {
   console.error("❌ Error: No se proporcionó username");
   process.exit(1);
 }
-
 
 // --- START BOT ---
 async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_TOKEN, panelPort = PANEL_PORT) {
