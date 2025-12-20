@@ -4,6 +4,7 @@ const fs = require("fs");
 
 console.log("🚀 BZM Multi Launcher");
 
+// Paths
 const basePath = path.dirname(process.execPath);
 const botPath = process.platform === "win32"
   ? path.join(basePath, "bzm-bot.exe")
@@ -16,20 +17,29 @@ if (!fs.existsSync(cuentasPath)) {
   process.exit(0);
 }
 
-
 const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
+
+const activeAccounts = new Set(); // Evita duplicados
 
 class BotController {
   constructor(username, port, proxy) {
     this.username = username;
     this.port = port;
-    this.proxy = proxy; // Proxy opcional
+    this.proxy = proxy;
     this.process = null;
     this.resetLongActive = false;
+    this.resetInProgress = false;
   }
 
-  start() {
+  async start() {
+    if (activeAccounts.has(this.username)) {
+      console.log(`[${this.username}] ⚠️ Bot ya activo, evitando duplicado`);
+      return;
+    }
+
+    activeAccounts.add(this.username);
+
     return new Promise(resolve => {
       console.log(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
 
@@ -48,7 +58,10 @@ class BotController {
       this.process.stdout.on("data", data => {
         const msg = data.toString();
         process.stdout.write(`[${this.username}] ${msg}`);
-        if (msg.includes("READY")) resolve();
+        if (msg.includes("READY") && !this._readyResolved) {
+          this._readyResolved = true;
+          resolve();
+        }
       });
 
       this.process.stderr.on("data", data =>
@@ -56,7 +69,10 @@ class BotController {
       );
 
       this.process.on("exit", code => {
+        activeAccounts.delete(this.username);
         console.log(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
+
+        // Reinicio automático solo si no es un duplicado
         if ([10, 11, 12].includes(code)) {
           console.log(`🔄 [${this.username}] Reinicio por código ${code}`);
           setTimeout(() => this.start(), 5000);
@@ -71,25 +87,33 @@ class BotController {
     if (this.process) {
       this.process.kill("SIGKILL");
       this.process = null;
+      activeAccounts.delete(this.username);
     }
   }
 
   async resetBot(waitMinutes = 1) {
+    if (this.resetInProgress) return; // Evita reinicio paralelo
+    this.resetInProgress = true;
+
     console.log(`♻️ [${this.username}] Reset automático iniciado`);
     this.kill();
     await delay(waitMinutes * 60 * 1000);
     await this.start();
+
+    this.resetInProgress = false;
     console.log(`♻️ [${this.username}] Bot reiniciado después de ${waitMinutes} minuto(s)`);
   }
 
   initScheduler() {
+    // Reset corto cada 90 minutos
     setInterval(async () => {
       if (!this.resetLongActive) await this.resetBot(1);
     }, 90 * 60 * 1000);
 
+    // Reset largo cada 16h
     setInterval(async () => {
       this.resetLongActive = true;
-      await this.resetBot(8 * 60);
+      await this.resetBot(8 * 60); // 8 horas
       this.resetLongActive = false;
     }, 16 * 60 * 60 * 1000);
   }
@@ -105,8 +129,8 @@ class BotController {
     await controller.start();
     bots.push(controller);
 
-    console.log(`🚀 Bot ${username} iniciado, esperando 90s para el siguiente...`);
-    await delay(10 * 1000); // delay entre bots
+    console.log(`🚀 Bot ${username} iniciado, esperando 30s para el siguiente...`);
+    await delay(30 * 1000); // Retardo seguro entre bots para Hypixel
   }
 
   process.on("SIGINT", () => {
