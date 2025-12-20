@@ -26,7 +26,7 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 function log(username, ...args) { console.log(`[${username}]`, ...args); }
 function jitterDelay(ms) { return delay(ms + Math.random() * 1500); }
 
-async function createBotWithProxy(username, proxyUrl) {
+async function createBot(username, proxyUrl = null, accessToken = null, clientToken = null) {
   let socket;
 
   if (proxyUrl) {
@@ -44,25 +44,26 @@ async function createBotWithProxy(username, proxyUrl) {
     log(username, `✅ Conectando vía proxy ${host}:${port}`);
   }
 
-  log(username, `✅ Conectando`);
   return mineflayer.createBot({
-    username,
+    username,              // solo para referencia local
     host: 'mc.hypixel.net',
     port: 25565,
     auth: 'microsoft',
+    accessToken,           // token exclusivo por bot
+    clientToken,           // token exclusivo por bot
     version: '1.8.9',
     stream: socket
   });
 }
 
-async function startBot(username) {
+async function startBot(username, accessToken = null, clientToken = null) {
   if (!username) return;
 
   console.log(`Iniciando bot para: ${username}`);
   const estadoPath = ensureEstado(username);
   const proxyUrl = process.env.SOCKS_PROXY || null;
 
-  const bot = await createBotWithProxy(username, proxyUrl);
+  const bot = await createBot(username, proxyUrl, accessToken, clientToken);
 
   bot.on('login', () => console.log(`[${username}] LOGIN OK`));
   bot.on('kicked', r => console.error(`[${username}] KICKED!`, r));
@@ -78,12 +79,10 @@ async function startBot(username) {
     excluirPalabras: ['APPEARING OFFLINE', '✎']
   });
 
-  // Maneja mensajes críticos sin cerrar todo el proceso
   chat.onMensajeContiene(/restart|Limbo|Sending packets too fast/i, () => {
     bot.end();
   });
 
-  // Panel singleton por proceso
   let panel = null;
 
   bot.once('spawn', async () => {
@@ -95,7 +94,6 @@ async function startBot(username) {
       if (!panel) {
         const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
         panel = new Panel(bot, { username, port: panelPort });
-
         bot.once('end', () => panel?.destroy());
       }
 
@@ -117,7 +115,9 @@ async function startBot(username) {
 if (require.main === module) {
   const i = process.argv.indexOf("--account");
   const username = i !== -1 ? process.argv[i + 1] : null;
-  startBot(username);
+  const accessToken = process.env.ACCESS_TOKEN || null;
+  const clientToken = process.env.CLIENT_TOKEN || null;
+  startBot(username, accessToken, clientToken);
 }
 
 module.exports = { startBot, log };
