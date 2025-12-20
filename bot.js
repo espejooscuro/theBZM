@@ -31,17 +31,15 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 function log(username, ...args) { console.log(`[${username}]`, ...args); }
 function jitterDelay(ms) { return delay(ms + Math.random() * 1500); }
 
-// Guardar sesión en archivo
+// Guardar sesión
 function saveSession(username, session) {
   fs.writeFileSync(getSessionPath(username), JSON.stringify(session, null, 2));
 }
 
-// Leer sesión guardada
+// Cargar sesión
 function loadSession(username) {
   const sessionPath = getSessionPath(username);
-  if (fs.existsSync(sessionPath)) {
-    return JSON.parse(fs.readFileSync(sessionPath));
-  }
+  if (fs.existsSync(sessionPath)) return JSON.parse(fs.readFileSync(sessionPath));
   return null;
 }
 
@@ -63,7 +61,7 @@ async function createBotWithProxy(username, proxyUrl = null, token = null) {
     log(username, `✅ Conectando vía proxy ${host}:${port}`);
   }
 
-  // Si tenemos token pero no viene uuid, obtenemos info del token
+  // Obtener info de token si no tiene uuid
   if (token && !token.uuid) {
     const tokenData = await getTokenInfo(token.accessToken);
     if (!tokenData) throw new Error('No se pudo obtener info del token');
@@ -94,7 +92,7 @@ async function createBotWithProxy(username, proxyUrl = null, token = null) {
   const bot = mineflayer.createBot(options);
   bot.username = username;
 
-  // Guardar token automáticamente si viene de Microsoft
+  // Guardar sesión automáticamente si es Microsoft
   if (!token) {
     bot.once('login', () => {
       const sessionToSave = {
@@ -111,13 +109,13 @@ async function createBotWithProxy(username, proxyUrl = null, token = null) {
   return bot;
 }
 
-// --- LECTURA DE VARIABLES DE ENTORNO ---
+// Variables de entorno
 const BOT_USERNAME = process.env.BOT_USERNAME;
 const BOT_PROXY = process.env.BOT_PROXY || null;
 let BOT_TOKEN = process.env.BOT_TOKEN ? JSON.parse(process.env.BOT_TOKEN) : null;
 const PANEL_PORT = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
 
-// Si existe sesión guardada, usarla
+// Cargar sesión guardada si existe
 if (!BOT_TOKEN && BOT_USERNAME) {
   const savedSession = loadSession(BOT_USERNAME);
   if (savedSession) BOT_TOKEN = savedSession;
@@ -128,7 +126,7 @@ if (!BOT_USERNAME) {
   process.exit(1);
 }
 
-// --- START BOT ---
+// START BOT
 async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_TOKEN, panelPort = PANEL_PORT) {
   if (!username) throw new Error('No se proporcionó username');
 
@@ -155,7 +153,11 @@ async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_
     excluirPalabras: ['APPEARING OFFLINE', '✎']
   });
 
-  chat.onMensajeContiene(/restart|Limbo|Sending packets too fast/i, () => bot.end());
+  // Reinicio ante mensajes críticos
+  chat.onMensajeContiene(/restart|Limbo|packets too fast|server will restart soon|Game Update|server is too laggy/i, () => {
+    log(username, '⚠️ Mensaje crítico detectado, reiniciando bot...');
+    bot.end();
+  });
 
   let panel = null;
 
@@ -187,7 +189,7 @@ async function startBot(username = BOT_USERNAME, proxy = BOT_PROXY, token = BOT_
   return bot;
 }
 
-// Si se ejecuta directamente (sin launcher), arrancamos con variables de entorno
+// Ejecutar directamente
 if (require.main === module) {
   startBot().catch(err => {
     console.error('❌ Error al iniciar bot:', err);

@@ -29,6 +29,7 @@ class BotController {
     this.process = null;
     this.resetLongActive = false;
     this.schedulerStarted = false;
+    this.pendingReset = false;
   }
 
   start() {
@@ -36,25 +37,42 @@ class BotController {
       logmc(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
 
       this.process = spawn(botPath, [], {
-  stdio: ["ignore", "pipe", "pipe"],
-  env: {
-    ...process.env,
-    BOT_USERNAME: this.username,
-    BOT_PORT: String(this.port),
-    ...(this.proxy ? { BOT_PROXY: this.proxy } : {}),     // solo si hay proxy
-    ...(this.token ? { BOT_TOKEN: JSON.stringify(this.token) } : {})
-  },
-  detached: process.platform !== "win32"
-});
-
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          BOT_USERNAME: this.username,
+          BOT_PORT: String(this.port),
+          ...(this.proxy ? { BOT_PROXY: this.proxy } : {}),
+          ...(this.token ? { BOT_TOKEN: JSON.stringify(this.token) } : {})
+        },
+        detached: process.platform !== "win32"
+      });
 
       if (process.platform !== "win32") this.process.unref();
 
-      this.process.stdout.on("data", data => {
+      this.process.stdout.on("data", async data => {
         const msg = data.toString();
         process.stdout.write(`[${this.username}] ${msg}`);
+
+        // Detectar login exitoso
         if (msg.includes("Welcome to Hypixel SkyBlock!")) {
           resolve();
+        }
+
+        // Mensajes críticos para reiniciar
+        const criticalPatterns = [
+          /restart/i,
+          /Limbo/i,
+          /Sending packets too fast/i,
+          /server will restart soon/i,
+          /Game Update/i
+        ];
+
+        if (criticalPatterns.some(rx => rx.test(msg)) && !this.pendingReset) {
+          this.pendingReset = true;
+          logmc(`⚠️ [${this.username}] Mensaje crítico detectado, reiniciando bot...`);
+          await this.resetBot();
+          this.pendingReset = false;
         }
       });
 
@@ -85,20 +103,28 @@ class BotController {
   }
 
   async resetBot(waitMinutes = 1) {
-    logmc(`♻️ [${this.username}] Reset automático iniciado`);
-    this.kill();
-    await delay(waitMinutes * 60 * 1000);
-    await this.start();
-  }
+  // Delay aleatorio entre 30s y 3min antes de reiniciar
+  const randomDelay = 30 * 1000 + Math.random() * (180 * 1000 - 30 * 1000);
+  logmc(`⏳ Esperando ${Math.round(randomDelay / 1000)}s antes de resetear bot ${this.username}...`);
+  await delay(randomDelay);
+
+  logmc(`♻️ [${this.username}] Reset automático iniciado`);
+  this.kill();
+  await delay(waitMinutes * 60 * 1000);
+  await this.start();
+}
+
 
   initScheduler() {
+    // Reset corto cada 1h30min
     setInterval(async () => {
       if (!this.resetLongActive) await this.resetBot(1);
     }, 90 * 60 * 1000);
 
+    // Reset largo cada 16h
     setInterval(async () => {
       this.resetLongActive = true;
-      await this.resetBot(8 * 60); // reset largo
+      await this.resetBot(8 * 60); // reset largo de 8 horas
       this.resetLongActive = false;
     }, 16 * 60 * 60 * 1000);
   }
