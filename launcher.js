@@ -37,11 +37,11 @@ class BotController {
         stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...process.env,
-          BOT_PORT: this.port,
           SOCKS_PROXY: this.proxy || ""
         },
         detached: process.platform !== "win32"
       });
+
 
       if (process.platform !== "win32") this.process.unref();
 

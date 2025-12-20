@@ -16,7 +16,9 @@ function getEstadoPath(username) {
 
 function ensureEstado(username) {
   const estadoPath = getEstadoPath(username);
-  if (!fs.existsSync(estadoPath)) fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
+  if (!fs.existsSync(estadoPath)) {
+    fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
+  }
   return estadoPath;
 }
 
@@ -34,13 +36,7 @@ async function createBotWithProxy(username, proxyUrl) {
 
     const info = await SocksClient.createConnection({
       command: 'connect',
-      proxy: {
-        host,
-        port: parseInt(port),
-        type: 5,
-        userId: user,
-        password: pass
-      },
+      proxy: { host, port: parseInt(port), type: 5, userId: user, password: pass },
       destination: { host: 'mc.hypixel.net', port: 25565 }
     });
 
@@ -54,43 +50,40 @@ async function createBotWithProxy(username, proxyUrl) {
     port: 25565,
     auth: 'microsoft',
     version: '1.8.9',
-    stream: socket || undefined
+    stream: socket
   });
 }
 
 async function startBot(username) {
-  if (!username) return console.error("❌ Debes pasar un username válido");
+  if (!username) return;
 
   console.log(`Iniciando bot para: ${username}`);
   const estadoPath = ensureEstado(username);
-
   const proxyUrl = process.env.SOCKS_PROXY || null;
+
   const bot = await createBotWithProxy(username, proxyUrl);
 
   bot.on('login', () => console.log(`[${username}] LOGIN OK`));
-  bot.on('kicked', (reason) => console.error(`[${username}] KICKED!`, reason));
-  bot.on('end', () => console.log(`[${username}] END`));
-  bot.on('error', (err) => console.error(`[${username}] ERROR`, err));
+  bot.on('kicked', r => console.error(`[${username}] KICKED!`, r));
+  bot.on('error', e => console.error(`[${username}] ERROR`, e));
 
   new InventoryListener(bot);
-  const itemClicker = new ContainerInteractor(bot, 150, 350);
+  new ContainerInteractor(bot, 150, 350);
   new ScoreboardListener(bot);
 
   const chat = new ChatListener(bot, {
-    palabras: ['Connecting to', 'MiniEspe'],
+    palabras: ['Connecting to'],
     tipos: ['sistema'],
     excluirPalabras: ['APPEARING OFFLINE', '✎']
   });
 
-  chat.onMensajeContiene(/You have 60 seconds|restart|Sending packets too fast|Limbo|maximum of/i, registro => {
-    log(username, '⚠️ Mensaje crítico:', registro.mensaje);
-    bot.end(); process.exitCode = 10; process.exit();
+  // Maneja mensajes críticos sin cerrar todo el proceso
+  chat.onMensajeContiene(/restart|Limbo|Sending packets too fast/i, () => {
+    bot.end();
   });
 
-  bot.on('duplicateBoughtReset', ({ nombre }) => {
-    log(username, '❌ Dupe detectado:', nombre);
-    bot.end(); process.exitCode = 12; process.exit();
-  });
+  // Panel singleton por proceso
+  let panel = null;
 
   bot.once('spawn', async () => {
     try {
@@ -98,22 +91,17 @@ async function startBot(username) {
       estado.finished = false;
       fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
 
-      const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
-      const panel = new Panel(bot, { username, port: panelPort });
+      if (!panel) {
+        panel = new Panel(bot, { username });
+        bot.once('end', () => panel?.destroy());
+      }
 
       await jitterDelay(4000);
       chat.enviar('/skyblock');
       await jitterDelay(5000);
       chat.enviar('/warp garden');
       await jitterDelay(5000);
-      chat.enviar('/viewstash material');
-      await jitterDelay(2000);
-      itemClicker.click({ contiene: "Sell Stash Now", tipo: 'contenedor' });
-      await jitterDelay(2000);
-      itemClicker.click({ contiene: "Selling whole inventory", tipo: 'contenedor' });
-      await jitterDelay(5000);
 
-      log(username, '✅ Conectado');
       console.log("READY");
       panel.manualReset();
     } catch (e) {
@@ -124,12 +112,9 @@ async function startBot(username) {
 }
 
 if (require.main === module) {
-  const args = process.argv.slice(2);
-  let username = null;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--account" && i + 1 < args.length) username = args[i + 1];
-  }
-  startBot(username).catch(err => console.error("❌ Error crítico:", err));
+  const i = process.argv.indexOf("--account");
+  const username = i !== -1 ? process.argv[i + 1] : null;
+  startBot(username);
 }
 
 module.exports = { startBot, log };
