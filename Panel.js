@@ -17,7 +17,7 @@ class Panel extends EventEmitter{
   super();
   const { username = 'unknown', port } = options;
   this.username = username;
-  this.port = port || 3000;
+  this.port = port || 0;
 
 
 
@@ -77,20 +77,19 @@ class Panel extends EventEmitter{
     this.app.get('/viewer-port', (req, res) => res.json({ port: this.viewerPort }));
 
     this.server.listen(this.port, () => {
-        console.log(`🌐 Panel [${this.username}] → http://localhost:${this.port}`);
-        const url = `http://localhost:${this.port}`;
+      console.log(`🌐 Panel [${this.username}] → http://localhost:${this.server.address().port}`);
+      const url = `http://localhost:${this.server.address().port}`;
+      
+      // Abrir web solo si no estaba abierta
+      if (!webYaAbierta) {
+          if (process.platform === 'win32') exec(`start ${url}`);
+          else if (process.platform === 'darwin') exec(`open ${url}`);
+          else exec(`xdg-open ${url}`);
 
+          fs.writeFileSync(this.estadoPath, JSON.stringify({ webAbierta: true }, null, 2));
+      }
+  });
 
-        // Abrir web solo si no estaba abierta
-        if (!webYaAbierta) {
-            if (process.platform === 'win32') exec(`start ${url}`);
-            else if (process.platform === 'darwin') exec(`open ${url}`);
-            else exec(`xdg-open ${url}`);
-
-            // Guardar que la web ya se abrió
-            fs.writeFileSync(this.estadoPath, JSON.stringify({ webAbierta: true }, null, 2));
-        }
-    });
 
 // ======================== WHITELIST POR USUARIO ========================
     const isPkg = typeof process.pkg !== "undefined";

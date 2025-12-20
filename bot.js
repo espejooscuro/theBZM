@@ -92,7 +92,9 @@ async function startBot(username) {
       fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
 
       if (!panel) {
-        panel = new Panel(bot, { username });
+        const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
+        panel = new Panel(bot, { username, port: panelPort });
+
         bot.once('end', () => panel?.destroy());
       }
 

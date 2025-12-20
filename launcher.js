@@ -34,13 +34,15 @@ class BotController {
       console.log(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
 
       this.process = spawn(botPath, ["--account", this.username], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          SOCKS_PROXY: this.proxy || ""
-        },
-        detached: process.platform !== "win32"
-      });
+  stdio: ["ignore", "pipe", "pipe"],
+  env: {
+    ...process.env,
+    BOT_PORT: this.port, // cada bot con un puerto distinto
+    SOCKS_PROXY: this.proxy || ""
+  },
+  detached: process.platform !== "win32"
+});
+
 
 
       if (process.platform !== "win32") this.process.unref();
