@@ -4,7 +4,6 @@ const fs = require("fs");
 
 console.log("🚀 BZM Multi Launcher");
 
-// Paths
 const basePath = path.dirname(process.execPath);
 const botPath = process.platform === "win32"
   ? path.join(basePath, "bzm-bot.exe")
@@ -28,58 +27,44 @@ class BotController {
     this.port = port;
     this.proxy = proxy;
     this.process = null;
-    this.resetLongActive = false;
+    this.running = false;      // Bloquea múltiples starts
     this.resetInProgress = false;
   }
 
   async start() {
-    if (activeAccounts.has(this.username)) {
+    if (this.running || activeAccounts.has(this.username)) {
       console.log(`[${this.username}] ⚠️ Bot ya activo, evitando duplicado`);
       return;
     }
 
+    this.running = true;
     activeAccounts.add(this.username);
+    this._readyResolved = false;
 
-    return new Promise(resolve => {
-      console.log(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
+    console.log(`▶ Lanzando bot ${this.username} ${this.proxy ? "(proxy)" : ""}`);
 
-      this.process = spawn(botPath, ["--account", this.username], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          BOT_PORT: this.port,
-          SOCKS_PROXY: this.proxy || ""
-        },
-        detached: process.platform !== "win32"
-      });
+    this.process = spawn(botPath, ["--account", this.username], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, BOT_PORT: this.port, SOCKS_PROXY: this.proxy || "" },
+      detached: false
+    });
 
-      if (process.platform !== "win32") this.process.unref();
+    this.process.stdout.on("data", data => {
+      const msg = data.toString();
+      process.stdout.write(`[${this.username}] ${msg}`);
+      if (msg.includes("READY") && !this._readyResolved) {
+        this._readyResolved = true;
+      }
+    });
 
-      this.process.stdout.on("data", data => {
-        const msg = data.toString();
-        process.stdout.write(`[${this.username}] ${msg}`);
-        if (msg.includes("READY") && !this._readyResolved) {
-          this._readyResolved = true;
-          resolve();
-        }
-      });
+    this.process.stderr.on("data", data =>
+      process.stderr.write(`[${this.username} ERROR] ${data}`)
+    );
 
-      this.process.stderr.on("data", data =>
-        process.stderr.write(`[${this.username} ERROR] ${data}`)
-      );
-
-      this.process.on("exit", code => {
-        activeAccounts.delete(this.username);
-        console.log(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
-
-        // Reinicio automático solo si no es un duplicado
-        if ([10, 11, 12].includes(code)) {
-          console.log(`🔄 [${this.username}] Reinicio por código ${code}`);
-          setTimeout(() => this.start(), 5000);
-        }
-      });
-
-      this.initScheduler();
+    this.process.on("exit", code => {
+      console.log(`🔌 [${this.username}] Proceso terminó con código: ${code}`);
+      activeAccounts.delete(this.username);
+      this.running = false;
     });
   }
 
@@ -87,35 +72,9 @@ class BotController {
     if (this.process) {
       this.process.kill("SIGKILL");
       this.process = null;
+      this.running = false;
       activeAccounts.delete(this.username);
     }
-  }
-
-  async resetBot(waitMinutes = 1) {
-    if (this.resetInProgress) return; // Evita reinicio paralelo
-    this.resetInProgress = true;
-
-    console.log(`♻️ [${this.username}] Reset automático iniciado`);
-    this.kill();
-    await delay(waitMinutes * 60 * 1000);
-    await this.start();
-
-    this.resetInProgress = false;
-    console.log(`♻️ [${this.username}] Bot reiniciado después de ${waitMinutes} minuto(s)`);
-  }
-
-  initScheduler() {
-    // Reset corto cada 90 minutos
-    setInterval(async () => {
-      if (!this.resetLongActive) await this.resetBot(1);
-    }, 90 * 60 * 1000);
-
-    // Reset largo cada 16h
-    setInterval(async () => {
-      this.resetLongActive = true;
-      await this.resetBot(8 * 60); // 8 horas
-      this.resetLongActive = false;
-    }, 16 * 60 * 60 * 1000);
   }
 }
 
@@ -130,7 +89,7 @@ class BotController {
     bots.push(controller);
 
     console.log(`🚀 Bot ${username} iniciado, esperando 30s para el siguiente...`);
-    await delay(30 * 1000); // Retardo seguro entre bots para Hypixel
+    await delay(30 * 1000);
   }
 
   process.on("SIGINT", () => {
