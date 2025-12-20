@@ -1,4 +1,5 @@
 const mineflayer = require('mineflayer');
+const { SocksClient } = require('socks');
 const InventoryListener = require('./InventoryListener');
 const ContainerInteractor = require('./ContainerInteractor');
 const ScoreboardListener = require('./ScoreboardListener');
@@ -13,74 +14,66 @@ function getEstadoPath(username) {
   return path.join(basePath, `estado_${username}.json`);
 }
 
-
 function ensureEstado(username) {
   const estadoPath = getEstadoPath(username);
-  if (!fs.existsSync(estadoPath)) {
-    fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
-  }
+  if (!fs.existsSync(estadoPath)) fs.writeFileSync(estadoPath, JSON.stringify({ webAbierta: false }, null, 2));
   return estadoPath;
 }
 
-function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function log(username, ...args) { console.log(`[${username}]`, ...args); }
+function jitterDelay(ms) { return delay(ms + Math.random() * 1500); }
 
-function log(username, ...args) {
-  console.log(`[${username}]`, ...args);
-}
+async function createBotWithProxy(username, proxyUrl) {
+  let socket;
 
-function jitterDelay(ms) {
-  return delay(ms + Math.random() * 1500); // añade 0-1.5s aleatorio
-}
+  if (proxyUrl) {
+    const match = proxyUrl.match(/socks5:\/\/(.*):(.*)@(.*):(\d+)/);
+    if (!match) throw new Error(`Formato de proxy inválido: ${proxyUrl}`);
+    const [, user, pass, host, port] = match;
 
-async function startBot(username) {
-  if (!username) {
-    console.error("❌ Debes pasar un username válido");
-    return; // no cerramos todo el launcher
+    const info = await SocksClient.createConnection({
+      command: 'connect',
+      proxy: {
+        host,
+        port: parseInt(port),
+        type: 5,
+        userId: user,
+        password: pass
+      },
+      destination: { host: 'mc.hypixel.net', port: 25565 }
+    });
+
+    socket = info.socket;
+    log(username, `✅ Conectando vía proxy ${host}:${port}`);
   }
 
-  console.log(`Iniciando bot para: ${username}`);
-
-  const estadoPath = ensureEstado(username);
-
-  const bot = mineflayer.createBot({
+  return mineflayer.createBot({
+    username,
     host: 'mc.hypixel.net',
     port: 25565,
     auth: 'microsoft',
-    username,
     version: '1.8.9',
-    keepAlive: true,
-    timeout: 60000,
-    connectTimeout: 120000
+    stream: socket || undefined
   });
+}
 
-  bot.on('kicked', (reason, loggedIn) => {
-  console.error(`[${username}] KICKED!`, reason, loggedIn);
-});
+async function startBot(username) {
+  if (!username) return console.error("❌ Debes pasar un username válido");
 
-bot.on('end', (reason) => {
-  console.error(`[${username}] END!`, reason);
-});
+  console.log(`Iniciando bot para: ${username}`);
+  const estadoPath = ensureEstado(username);
 
-bot.on('error', (err) => {
-  console.error(`[${username}] ERROR!`, err.stack || err);
-});
+  const proxyUrl = process.env.SOCKS_PROXY || null;
+  const bot = await createBotWithProxy(username, proxyUrl);
 
-bot.on('login', () => {
-  console.log(`[${username}] LOGIN OK`);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('[UNCAUGHT EXCEPTION]', err.stack || err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[UNHANDLED REJECTION]', reason.stack || reason, promise);
-});
+  bot.on('login', () => console.log(`[${username}] LOGIN OK`));
+  bot.on('kicked', (reason) => console.error(`[${username}] KICKED!`, reason));
+  bot.on('end', () => console.log(`[${username}] END`));
+  bot.on('error', (err) => console.error(`[${username}] ERROR`, err));
 
   new InventoryListener(bot);
-  let itemClicker = new ContainerInteractor(bot, 150, 350);
+  const itemClicker = new ContainerInteractor(bot, 150, 350);
   new ScoreboardListener(bot);
 
   const chat = new ChatListener(bot, {
@@ -89,19 +82,14 @@ process.on('unhandledRejection', (reason, promise) => {
     excluirPalabras: ['APPEARING OFFLINE', '✎']
   });
 
-  // Mensajes críticos: solo cerramos el bot, no todo el launcher
   chat.onMensajeContiene(/You have 60 seconds|restart|Sending packets too fast|Limbo|maximum of/i, registro => {
     log(username, '⚠️ Mensaje crítico:', registro.mensaje);
-    bot.end();
-    process.exitCode = 10;
-    process.exit();
+    bot.end(); process.exitCode = 10; process.exit();
   });
 
   bot.on('duplicateBoughtReset', ({ nombre }) => {
     log(username, '❌ Dupe detectado:', nombre);
-    bot.end();
-    process.exitCode = 12; // el launcher reinicia procesos con código 12
-  process.exit();
+    bot.end(); process.exitCode = 12; process.exit();
   });
 
   bot.once('spawn', async () => {
@@ -110,7 +98,6 @@ process.on('unhandledRejection', (reason, promise) => {
       estado.finished = false;
       fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2));
 
-      // Tomar el puerto del launcher
       const panelPort = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT) : undefined;
       const panel = new Panel(bot, { username, port: panelPort });
 
@@ -125,10 +112,10 @@ process.on('unhandledRejection', (reason, promise) => {
       await jitterDelay(2000);
       itemClicker.click({ contiene: "Selling whole inventory", tipo: 'contenedor' });
       await jitterDelay(5000);
-      log(username, '✅ Conectado');
-      console.log("READY"); // Señal para el launcher
-      panel.manualReset();
 
+      log(username, '✅ Conectado');
+      console.log("READY");
+      panel.manualReset();
     } catch (e) {
       log(username, '❌ Error en spawn:', e);
       bot.end();
@@ -136,21 +123,13 @@ process.on('unhandledRejection', (reason, promise) => {
   });
 }
 
-// Ejecutar automáticamente si se llama desde la línea de comandos
 if (require.main === module) {
   const args = process.argv.slice(2);
   let username = null;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--account" && i + 1 < args.length) {
-      username = args[i + 1];
-      break;
-    }
+    if (args[i] === "--account" && i + 1 < args.length) username = args[i + 1];
   }
-
-  startBot(username).catch(err => {
-    console.error("❌ Error crítico:", err);
-    // no cerramos todo el launcher
-  });
+  startBot(username).catch(err => console.error("❌ Error crítico:", err));
 }
 
 module.exports = { startBot, log };

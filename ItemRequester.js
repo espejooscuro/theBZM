@@ -1,5 +1,4 @@
 const EventEmitter = require('events');
-const ChatListener = require('./ChatListener');
 const ContainerInteractor = require('./ContainerInteractor');
 const SkyBlockItem = require('./SkyBlockItem');
 const InventoryListener = require('./InventoryListener');
@@ -127,13 +126,11 @@ class ItemRequester extends EventEmitter {
 
 
   limpiarNombre(itemName) {
-  if (!itemName) return "";
-  // Quitar códigos de color de Minecraft (§ + cualquier carácter)
-  let limpio = itemName.replace(/§./g, '');
-  // Quitar prefijos BUY / SELL
-  limpio = limpio.replace(/^(BUY|SELL)\s+/i, '');
-  // Quitar espacios al principio y final
-  return limpio.trim();
+    if (!itemName) return "";
+    let limpio = itemName.replace(/§./g, ''); // quitar códigos de color
+    limpio = limpio.replace(/^(BUY|SELL)\s+/i, ''); // quitar prefijos BUY/SELL
+    limpio = limpio.replace(/\s*x\d+$/i, ''); // quitar " x64", " x59", etc.
+    return limpio.trim();
 }
 
 
@@ -291,32 +288,40 @@ class ItemRequester extends EventEmitter {
     this.emit('sendCMD', { cmd: "/boostercookie" });
     await this.esperar(1000);
     console.log(`Procesando venta de item ${itemName}...`);
-    intentos = 0;
-    
-    if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario'})) console.log("Parece que no ha encontrado ningun objeto con ese nombre en el inventario..")
+    // Obtener todos los items válidos del contenedor o inventario
+    // 1️⃣ Obtener todos los items del inventario
+    const todosItemsInventario = this.containerListener.obtenerItemsValidosInventario();
 
-    while (intentos < maxIntentos) {
-      if (this.destroyed) break;
+// Comprobaciones de seguridad
+if (!this.panel || !this.panel.whitelist) {
+    console.error("❌ Panel o whitelist no definido");
+} else {
+    const itemsParaClick = todosItemsInventario.filter(item => {
+        if (!item || !item.nombreCustom) return false;
+        const nombreLimpio = this.limpiarNombre(item.nombreCustom);
+        return !!this.panel.whitelist[nombreLimpio]; // forzar boolean
+    });
 
-      intentos++;
-      // console.log(`🔹 [LOG] Intento ${intentos}: Click en inventario para "${name}"`);
-      await this.container.click({ contiene: itemName, tipo: 'inventario' });
-      await this.esperar(250);
+    console.log("📦 Items en inventario filtrados por whitelist:", itemsParaClick.map(i => this.limpiarNombre(i.nombreCustom)));
 
-      // Comprobar si ya no quedan objetos
-      if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
-        const inicio = Date.now();
-        while (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
-          if (Date.now() - inicio >= 3000) {
-            console.log(`🔹 [AVISO] No se han detectado más objetos de "${itemName}" durante 3s`);
-            this.finishedCollecting = true;
-            break;
-          }
-          await this.esperar(50);
+    for (const item of itemsParaClick) {
+        const itemName = this.limpiarNombre(item.nombreCustom);
+        let intentos = 0;
+
+        while (this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' }) && intentos < maxIntentos) {
+            if (this.destroyed) break;
+
+            await this.container.click({ contiene: itemName, tipo: 'inventario' });
+            await this.esperar(250);
+
+            intentos++;
         }
-        if (this.finishedCollecting) break;
-      }
+
+        console.log(`✅ Item ${itemName}: procesado del inventario`);
     }
+}
+
+
 
   }
   
@@ -579,29 +584,38 @@ while (!this.finishedCollecting) {
       this.emit('sendCMD', { cmd: "/boostercookie" });
       await this.esperar(1000);
 
-      intentos = 0;
-      while (intentos < maxIntentos) {
-        if (this.destroyed) break;
+const todosItemsInventario = this.containerListener.obtenerItemsValidosInventario();
 
-        intentos++;
-        // console.log(`🔹 [LOG] Intento ${intentos}: Click en inventario para "${name}"`);
-        await this.container.click({ contiene: itemName, tipo: 'inventario' });
-        await this.esperar(250);
+// Comprobaciones de seguridad
+if (!this.panel || !this.panel.whitelist) {
+    console.error("❌ Panel o whitelist no definido");
+} else {
+    const itemsParaClick = todosItemsInventario.filter(item => {
+        if (!item || !item.nombreCustom) return false;
+        const nombreLimpio = this.limpiarNombre(item.nombreCustom);
+        return !!this.panel.whitelist[nombreLimpio]; // forzar boolean
+    });
 
-        // Comprobar si ya no quedan objetos
-        if (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
-          const inicio = Date.now();
-          while (!this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' })) {
-            if (Date.now() - inicio >= 3000) {
-              console.log(`🔹 [AVISO] No se han detectado más objetos de "${itemName}" durante 3s`);
-              this.finishedCollecting = true;
-              break;
-            }
-            await this.esperar(50);
-          }
-          if (this.finishedCollecting) break;
+    console.log("📦 Items en inventario filtrados por whitelist:", itemsParaClick.map(i => this.limpiarNombre(i.nombreCustom)));
+
+    for (const item of itemsParaClick) {
+        const itemName = this.limpiarNombre(item.nombreCustom);
+        let intentos = 0;
+
+        while (this.containerListener.existeItemEnContenedor({ contiene: itemName, tipo: 'inventario' }) && intentos < maxIntentos) {
+            if (this.destroyed) break;
+
+            await this.container.click({ contiene: itemName, tipo: 'inventario' });
+            await this.esperar(250);
+
+            intentos++;
         }
-      }
+
+        console.log(`✅ Item ${itemName}: procesado del inventario`);
+    }
+}
+
+
 
         await this.container.cerrarContenedor();
         await this.esperar(1000);

@@ -11,16 +11,11 @@ const botPath = process.platform === "win32"
 
 const cuentasPath = path.join(basePath, "cuentas.json");
 if (!fs.existsSync(cuentasPath)) {
-  fs.writeFileSync(
-    cuentasPath,
-    JSON.stringify([
-      { username: "MiniEspe" },
-      { username: "nuwifer", proxy: "socks5://184.185.2.91:4145" }
-    ], null, 2)
-  );
-  console.log("📝 cuentas.json creado. Rellénalo y reinicia.");
+  fs.writeFileSync(cuentasPath, JSON.stringify([], null, 2));
+  console.log("📝 cuentas.json creado. Añade tus cuentas y reinicia.");
   process.exit(0);
 }
+
 
 const cuentas = JSON.parse(fs.readFileSync(cuentasPath));
 const delay = ms => new Promise(r => setTimeout(r, ms));
