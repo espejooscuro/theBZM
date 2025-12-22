@@ -4,15 +4,14 @@ const fs = require('fs');
 const SERVER = 'hub.enderblade.com';
 const PORT = 25565;
 
-// Leer todos los archivos que empiezan por tokens_ y terminan en .json
 const tokenFiles = fs.readdirSync('.').filter(f => f.startsWith('tokens_') && f.endsWith('.json'));
 
-if (tokenFiles.length === 0) {
-  console.log('No se encontraron archivos tokens_*.json en el directorio.');
+if (!tokenFiles.length) {
+  console.log('No se encontraron archivos tokens_*.json.');
   process.exit(0);
 }
 
-tokenFiles.forEach(file => {
+function launchBot(file) {
   try {
     const tokens = JSON.parse(fs.readFileSync(file, 'utf8'));
 
@@ -30,9 +29,16 @@ tokenFiles.forEach(file => {
     });
 
     bot.on('error', err => console.error(`Error del bot ${tokens.username}:`, err));
-    bot.on('end', () => console.log(`${tokens.username} desconectado`));
+
+    bot.on('end', () => {
+      console.log(`${tokens.username} desconectado, reconectando en 5s...`);
+      setTimeout(() => launchBot(file), 5000); // reconecta automáticamente
+    });
 
   } catch (err) {
     console.error('Error leyendo el archivo', file, err);
   }
-});
+}
+
+// Conectar bots uno por uno con pequeño retraso
+tokenFiles.forEach((file, i) => setTimeout(() => launchBot(file), i * 2000));
