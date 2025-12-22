@@ -18,27 +18,26 @@ function launchBot(file) {
     const bot = mineflayer.createBot({
       host: SERVER,
       port: PORT,
-      username: tokens.username,
       auth: 'microsoft',
       accessToken: tokens.accessToken,
+      // username opcional: si se omite, Mineflayer intenta obtenerlo del token
       version: '1.20.4'
     });
 
     bot.on('spawn', () => {
-      console.log(`${tokens.username} conectado usando tokens desde ${file}`);
+      console.log(`Bot conectado usando tokens desde ${file}`);
     });
 
-    bot.on('error', err => console.error(`Error del bot ${tokens.username}:`, err));
+    bot.on('error', err => console.error(`Error en bot de ${file}:`, err));
 
     bot.on('end', () => {
-      console.log(`${tokens.username} desconectado, reconectando en 5s...`);
-      setTimeout(() => launchBot(file), 5000); // reconecta automáticamente
+      console.log(`Bot de ${file} desconectado, reconectando en 5s...`);
+      setTimeout(() => launchBot(file), 5000);
     });
 
   } catch (err) {
     console.error('Error leyendo el archivo', file, err);
   }
-}
+};
 
-// Conectar bots uno por uno con pequeño retraso
 tokenFiles.forEach((file, i) => setTimeout(() => launchBot(file), i * 2000));
