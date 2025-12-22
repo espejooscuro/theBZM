@@ -101,30 +101,34 @@ class BotController {
     }
   }
 
-  async resetBot() {
-  // Delay aleatorio entre 30s y 3min antes de reiniciar
-  const randomDelay = 30 * 1000 + Math.random() * (180 * 1000 - 30 * 1000);
-  console.log(`⏳ Esperando ${Math.round(randomDelay / 1000)}s antes de resetear bot ${this.username}...`);
-  
+  async resetBot(waitMs = null) {
+  const randomDelay =
+    30 * 1000 + Math.random() * (180 * 1000 - 30 * 1000);
+
+  const wait = waitMs ?? randomDelay;
+
+  console.log(`⏳ Esperando ${Math.round(wait / 1000)}s antes de resetear bot ${this.username}...`);
   console.log(`♻️ [${this.username}] Reset automático iniciado`);
+
   this.kill();
-  await delay(randomDelay);
-  await this.start(); // quitamos waitMinutes
+  await delay(wait);
+  await this.start();
 }
 
 initScheduler() {
-  // Reset corto cada 1h30min
+  // Reset corto cada 1h30min (con delay aleatorio)
   setInterval(async () => {
     if (!this.resetLongActive) await this.resetBot();
   }, 5400000);
 
-  // Reset largo cada 16h
+  // Reset largo cada 16h → espera 8h antes de reiniciar
   setInterval(async () => {
     this.resetLongActive = true;
-    await this.resetBot(); // también sin waitMinutes
+    await this.resetBot(8 * 60 * 60 * 1000); // 8 horas
     this.resetLongActive = false;
-  },57600000);
+  }, 57600000);
 }
+
 
 }
 

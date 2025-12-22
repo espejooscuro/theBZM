@@ -5,9 +5,9 @@
   "private": true,
   "scripts": {
     "start": "node launcher.js",
-    "build:win": "pkg bot.js --targets node18-win-x64 --output dist/bzm-bot.exe && pkg launcher.js --targets node18-win-x64 --output dist/bzm.exe",
-    "build:pi32": "pkg bot.js --targets node18-linux-armv7 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-armv7 --output dist/bzm",
-    "build:pi64": "pkg bot.js --targets node18-linux-arm64 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-arm64 --output dist/bzm"
+    "build:win": "pkg bot.js --targets node18-win-x64 --output dist/bzm-bot.exe && pkg launcher.js --targets node18-win-x64 --output dist/bzm.exe && pkg tokenCreator.js --targets node18-win-x64 --output dist/tokenCreator.exe",
+    "build:pi32": "pkg bot.js --targets node18-linux-armv7 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-armv7 --output dist/bzm && pkg tokenCreator.js --targets node18-linux-armv7 --output dist/tokenCreator",
+    "build:pi64": "pkg bot.js --targets node18-linux-arm64 --output dist/bzm-bot && pkg launcher.js --targets node18-linux-arm64 --output dist/bzm && pkg tokenCreator.js --targets node18-linux-arm64 --output dist/tokenCreator"
   },
   "dependencies": {
     "bytenode": "^1.5.7",
@@ -40,6 +40,7 @@
       "Panel.js",
       "ItemRequester.js",
       "SkyBlockItem.js",
+      "tokenCreator.js",
       "node_modules/node-fetch/**/*"
     ]
   }

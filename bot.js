@@ -78,16 +78,17 @@ async function createBotWithProxy(username, proxyUrl = null, token = null) {
   };
 
   if (token) {
-    options.auth = 'mojang';
+    options.auth = 'microsoft'; // <- siempre Microsoft
     options.session = {
       accessToken: token.accessToken,
       clientToken: token.clientToken,
       selectedProfile: { id: token.uuid, name: username, keepAlive: false }
     };
     options.skipValidation = true;
-  } else {
+} else {
     options.auth = 'microsoft';
-  }
+}
+
 
   const bot = mineflayer.createBot(options);
   bot.username = username;
