@@ -1,39 +1,56 @@
-// botRunner.js
-const mineflayer = require('mineflayer');
-const fs = require('fs');
+const { createBot } = require("mineflayer");
+const { getPackets, makePackets } = require("./packets.js");
+const { getTokenInfo } = require('./TokenHandler.js');
+const axios = require('axios');
 
-const SERVER = 'hub.enderblade.com';
-const PORT = 25565;
+async function makeBot(ign, safeIgn) {
+    return new Promise(async (resolve) => {
+        let bot;
 
-const file = process.argv[2];
-if (!file) {
-  console.error('Debes pasar el archivo de token como argumento');
-  process.exit(1);
+        if (ign.length > 16) { // login con token
+            let { username, uuid } = await getTokenInfo(ign);
+            bot = createBot({
+                host: 'play.hypixel.net',
+                port: 25565,
+                version: '1.8.9',
+                username: username,
+                session: {
+                    accessToken: ign,
+                    clientToken: uuid,
+                    selectedProfile: { id: uuid, name: username, keepAlive: false },
+                },
+                auth: 'mojang',
+                skipValidation: true,
+            });
+            bot.username = username;
+            ign = username;
+        } else { // login Microsoft
+            bot = createBot({
+                username: ign,
+                auth: 'microsoft',
+                version: '1.8.9',
+                host: 'play.hypixel.net',
+            });
+        }
+
+        makePackets(ign, bot._client);
+        bot.setMaxListeners(20);
+
+        bot.once("login", async () => {
+            if (!bot.uuid) bot.uuid = await getUUID(ign);
+            bot.head = `https://mc-heads.net/head/${bot.uuid}.png`;
+            resolve(bot);
+        });
+    });
 }
 
-const tokens = JSON.parse(fs.readFileSync(file, 'utf8'));
-
-function launchBot() {
-  const bot = mineflayer.createBot({
-    host: SERVER,
-    port: PORT,
-    auth: 'microsoft',
-    accessToken: tokens.accessToken,
-    version: '1.20.4'
-  });
-
-  bot.on('spawn', () => {
-    console.log(`${tokens.username} conectado usando tokens desde ${file}`);
-  });
-
-  bot.on('error', err => {
-    console.error(`Error del bot ${tokens.username}:`, err);
-  });
-
-  bot.on('end', () => {
-    console.log(`${tokens.username} desconectado, reconectando en 5s...`);
-    setTimeout(launchBot, 5000); // reconexión automática
-  });
+async function getUUID(ign, attempt = 0) {
+    if (attempt === 3) return null;
+    try {
+        return (await axios.get(`https://api.mojang.com/users/profiles/minecraft/${ign}`)).data.id;
+    } catch {
+        return getUUID(ign, ++attempt);
+    }
 }
 
-launchBot();
+module.exports = { makeBot };
